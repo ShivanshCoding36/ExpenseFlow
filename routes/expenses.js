@@ -1,5 +1,4 @@
 const express = require('express');
-const Joi = require('joi');
 const Expense = require('../models/Expense');
 const budgetService = require('../services/budgetService');
 const categorizationService = require('../services/categorizationService');
@@ -8,24 +7,14 @@ const currencyService = require('../services/currencyService');
 const aiService = require('../services/aiService');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+const { ExpenseSchemas, validateRequest, validateQuery } = require('../middleware/inputValidator');
 const router = express.Router();
 
-const expenseSchema = Joi.object({
-  description: Joi.string().trim().max(100).required(),
-  amount: Joi.number().min(0.01).required(),
-  currency: Joi.string().uppercase().optional(),
-  category: Joi.string().valid('food', 'transport', 'entertainment', 'utilities', 'healthcare', 'shopping', 'other').required(),
-  type: Joi.string().valid('income', 'expense').required(),
-  merchant: Joi.string().trim().max(50).optional(),
-  date: Joi.date().optional(),
-  workspaceId: Joi.string().hex().length(24).optional()
-});
-
 // GET all expenses for authenticated user with pagination support
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, validateQuery(ExpenseSchemas.filter), async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
+    const page = req.query.page || 1;
+    const limit = req.query.limit || 50;
     const skip = (page - 1) * limit;
 
     const user = await User.findById(req.user._id);
@@ -87,12 +76,76 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST new expense for authenticated user
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, validateRequest(ExpenseSchemas.create), async (req, res) => {
   try {
-    const { error, value } = expenseSchema.validate(req.body);
-    if (error) return res.status(400).json({ error: error.details[0].message });
+    const user = await User.findById(req.user._id);
+    const expenseCurrency = req.body.currency || user.preferredCurrency;
 
-    const expenseService = require('../services/expenseService');
+    // Validate currency
+    if (!currencyService.isValidCurrency(expenseCurrency)) {
+      return res.status(400).json({ error: 'Invalid currency code' });
+    }
+
+    // Store original amount and currency
+    const expenseData = {
+      ...value,
+      user: value.workspaceId ? req.user._id : req.user._id, // User still relevant for reporting
+      addedBy: req.user._id,
+      workspace: value.workspaceId || null,
+      originalAmount: value.amount,
+      originalCurrency: expenseCurrency,
+      amount: value.amount // Keep original as primary amount
+    };
+
+    // If expense currency differs from user preference, add conversion info
+    if (expenseCurrency !== user.preferredCurrency) {
+      try {
+        const conversion = await currencyService.convertCurrency(
+          req.body.amount,
+          expenseCurrency,
+          user.preferredCurrency
+        );
+        expenseData.convertedAmount = conversion.convertedAmount;
+        expenseData.convertedCurrency = user.preferredCurrency;
+        expenseData.exchangeRate = conversion.exchangeRate;
+      } catch (conversionError) {
+        console.error('Currency conversion failed:', conversionError.message);
+        // Continue without conversion data
+      }
+    }
+
+    const expense = new Expense(expenseData);
+    await expense.save();
+
+    // Check if expense requires approval
+    const approvalService = require('../services/approvalService');
+    let requiresApproval = false;
+    let workflow = null;
+
+    if (expenseData.workspace) {
+        requiresApproval = await approvalService.requiresApproval(expenseData, expenseData.workspace);
+    }
+
+    if (requiresApproval) {
+        try {
+            workflow = await approvalService.submitForApproval(expense._id, req.user._id);
+            expense.status = 'pending_approval';
+            expense.approvalWorkflow = workflow._id;
+            await expense.save();
+        } catch (approvalError) {
+            console.error('Failed to submit for approval:', approvalError.message);
+            // Continue with normal flow if approval submission fails
+        }
+    }
+
+    // Update budget and goal progress using converted amount if available
+    const amountForBudget = expenseData.convertedAmount || value.amount;
+    if (value.type === 'expense') {
+        await budgetService.checkBudgetAlerts(req.user._id);
+    }
+    await budgetService.updateGoalProgress(req.user._id, value.type === 'expense' ? -amountForBudget : amountForBudget, value.category);
+
+    // Emit real-time update to all user's connected devices
     const io = req.app.get('io');
 
     const expense = await expenseService.createExpense(value, req.user._id, io);

@@ -18,7 +18,7 @@ const cors = require('cors');
 const socketAuth = require('./middleware/socketAuth');
 const CronJobs = require('./services/cronJobs');
 const { generalLimiter } = require('./middleware/rateLimiter');
-const { sanitizeInput, mongoSanitizeMiddleware } = require('./middleware/sanitization');
+const { sanitizeInput, sanitizationMiddleware, validateDataTypes } = require('./middleware/sanitizer');
 const securityMonitor = require('./services/securityMonitor');
 const AuditMiddleware = require('./middleware/auditMiddleware');
 const protect = require("./middleware/authMiddleware");
@@ -109,9 +109,10 @@ app.use(cors({
 // Rate limiting
 app.use(generalLimiter);
 
-// Input sanitization
-app.use(mongoSanitizeMiddleware);
-app.use(sanitizeInput);
+// Comprehensive input sanitization and validation middleware
+// Issue #461: Missing Input Validation on User Data
+app.use(sanitizationMiddleware);
+app.use(validateDataTypes);
 
 // Security monitoring
 app.use(securityMonitor.blockSuspiciousIPs());
@@ -236,25 +237,22 @@ console.log('Collaboration handler initialized');
 // Routes
 app.use('/api/auth', require('./middleware/rateLimiter').authLimiter, authRoutes);
 app.use('/api/currency', require('./routes/currency'));
+app.use('/api/groups', require('./routes/groups'));
+app.use('/api/splits', require('./routes/splits'));
+app.use('/api/workspaces', require('./routes/workspaces'));
+app.use('/api/tax', require('./routes/tax'));
 
-app.use('/api/user', protect, require('./routes/user'));
-app.use('/api/expenses', require('./middleware/rateLimiter').expenseLimiter, protect, expenseRoutes);
-app.use('/api/sync', protect, syncRoutes);
-app.use('/api/rules', protect, require('./routes/rules'));
-app.use('/api/notifications', protect, require('./routes/notifications'));
-app.use('/api/receipts', require('./middleware/rateLimiter').uploadLimiter, protect, require('./routes/receipts'));
-app.use('/api/budgets', protect, require('./routes/budgets'));
-app.use('/api/goals', protect, require('./routes/goals'));
-app.use('/api/analytics', protect, require('./routes/analytics'));
-app.use('/api/groups', protect, require('./routes/groups'));
-app.use('/api/splits', protect, require('./routes/splits'));
-app.use('/api/workspaces', protect, require('./routes/workspaces'));
-app.use('/api/tax', protect, require('./routes/tax'));
-app.use('/api/bills', protect, require('./routes/bills'));
-app.use('/api/calendar', protect, require('./routes/calendar'));
-app.use('/api/reminders', protect, require('./routes/reminders'));
-app.use('/api/audit', protect, require('./routes/audit'));
-app.use('/api/subscriptions', protect, require('./routes/subscriptions'));
+app.use('/api/accounts', require('./routes/accounts'));
+
+// Express error handler middleware (must be after all routes)
+app.use((err, req, res, next) => {
+  console.error('Express route error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+    error: process.env.NODE_ENV === 'production' ? undefined : err.stack
+  });
+});
 
 // Root route to serve the UI
 app.get('/', (req, res) => {

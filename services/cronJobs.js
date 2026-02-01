@@ -7,49 +7,83 @@ const BalanceHistory = require('../models/BalanceHistory');
 const NetWorthSnapshot = require('../models/NetWorthSnapshot');
 const emailService = require('../services/emailService');
 const currencyService = require('../services/currencyService');
+
 const InvoiceService = require('../services/invoiceService');
 const ReminderService = require('../services/reminderService');
-const intelligenceService = require('../services/intelligenceService');
-const subscriptionService = require('../services/subscriptionService');
-const wellnessService = require('../services/wellnessService');
-const analysisEngine = require('../services/analysisEngine');
+const alertService = require('./alertService');
 
 class CronJobs {
   static init() {
     // Process recurring expenses - Daily at 6 AM
+
     cron.schedule('0 6 * * *', async () => {
-      console.log('[CronJobs] Processing recurring expenses...');
-      await this.processRecurringExpenses();
+      try {
+        console.log('[CronJobs] Processing recurring expenses...');
+        await this.processRecurringExpenses();
+      } catch (err) {
+        console.error('[CronJobs] Error in recurring expenses:', err);
+        await alertService.notifyAdmin('Cron Failure: Recurring Expenses', err.stack || err.message);
+      }
     });
 
     // Send recurring expense reminders - Daily at 9 AM
+
     cron.schedule('0 9 * * *', async () => {
-      console.log('[CronJobs] Sending recurring expense reminders...');
-      await this.sendRecurringReminders();
+      try {
+        console.log('[CronJobs] Sending recurring expense reminders...');
+        await this.sendRecurringReminders();
+      } catch (err) {
+        console.error('[CronJobs] Error in recurring reminders:', err);
+        await alertService.notifyAdmin('Cron Failure: Recurring Reminders', err.stack || err.message);
+      }
     });
     
     // Generate recurring invoices - Daily at 6 AM
+
     cron.schedule('0 6 * * *', async () => {
-      console.log('[CronJobs] Generating recurring invoices...');
-      await this.generateRecurringInvoices();
+      try {
+        console.log('[CronJobs] Generating recurring invoices...');
+        await this.generateRecurringInvoices();
+      } catch (err) {
+        console.error('[CronJobs] Error in recurring invoice generation:', err);
+        await alertService.notifyAdmin('Cron Failure: Recurring Invoices', err.stack || err.message);
+      }
     });
     
     // Send payment reminders - Daily at 10 AM
+
     cron.schedule('0 10 * * *', async () => {
-      console.log('[CronJobs] Sending payment reminders...');
-      await this.sendPaymentReminders();
+      try {
+        console.log('[CronJobs] Sending payment reminders...');
+        await this.sendPaymentReminders();
+      } catch (err) {
+        console.error('[CronJobs] Error in payment reminders:', err);
+        await alertService.notifyAdmin('Cron Failure: Payment Reminders', err.stack || err.message);
+      }
     });
     
     // Apply late fees - Daily at 12 AM (midnight)
+
     cron.schedule('0 0 * * *', async () => {
-      console.log('[CronJobs] Applying late fees to overdue invoices...');
-      await this.applyLateFees();
+      try {
+        console.log('[CronJobs] Applying late fees to overdue invoices...');
+        await this.applyLateFees();
+      } catch (err) {
+        console.error('[CronJobs] Error in applying late fees:', err);
+        await alertService.notifyAdmin('Cron Failure: Apply Late Fees', err.stack || err.message);
+      }
     });
 
     // Weekly report - Every Sunday at 9 AM
+
     cron.schedule('0 9 * * 0', async () => {
-      console.log('[CronJobs] Sending weekly reports...');
-      await this.sendWeeklyReports();
+      try {
+        console.log('[CronJobs] Sending weekly reports...');
+        await this.sendWeeklyReports();
+      } catch (err) {
+        console.error('[CronJobs] Error in weekly reports:', err);
+        await alertService.notifyAdmin('Cron Failure: Weekly Reports', err.stack || err.message);
+      }
     });
     
     // Daily intelligence analysis and insights - Every day at 8 AM
@@ -59,57 +93,110 @@ class CronJobs {
     });
 
     // Monthly report - 1st day of month at 10 AM
+
     cron.schedule('0 10 1 * *', async () => {
-      console.log('[CronJobs] Sending monthly reports...');
-      await this.sendMonthlyReports();
+      try {
+        console.log('[CronJobs] Sending monthly reports...');
+        await this.sendMonthlyReports();
+      } catch (err) {
+        console.error('[CronJobs] Error in monthly reports:', err);
+        await alertService.notifyAdmin('Cron Failure: Monthly Reports', err.stack || err.message);
+      }
     });
 
     // Budget alerts - Daily at 8 PM
     cron.schedule('0 20 * * *', async () => {
-      console.log('[CronJobs] Checking budget alerts...');
-      await this.checkBudgetAlerts();
+      try {
+        console.log('[CronJobs] Checking budget alerts...');
+        await this.checkBudgetAlerts();
+      } catch (err) {
+        console.error('[CronJobs] Error in budget alerts:', err);
+        await alertService.notifyAdmin('Cron Failure: Budget Alerts', err.stack || err.message);
+      }
     });
 
     // Update exchange rates - Every 6 hours
+
     cron.schedule('0 */6 * * *', async () => {
-      console.log('[CronJobs] Updating exchange rates...');
-      await this.updateExchangeRates();
+      try {
+        console.log('[CronJobs] Updating exchange rates...');
+        await this.updateExchangeRates();
+      } catch (err) {
+        console.error('[CronJobs] Error in updating exchange rates:', err);
+        await alertService.notifyAdmin('Cron Failure: Exchange Rates', err.stack || err.message);
+      }
     });
 
     // Create daily balance snapshots - Daily at 11:55 PM
+
     cron.schedule('55 23 * * *', async () => {
-      console.log('[CronJobs] Creating daily balance snapshots...');
-      await this.createDailyBalanceSnapshots();
+      try {
+        console.log('[CronJobs] Creating daily balance snapshots...');
+        await this.createDailyBalanceSnapshots();
+      } catch (err) {
+        console.error('[CronJobs] Error in daily balance snapshots:', err);
+        await alertService.notifyAdmin('Cron Failure: Daily Balance Snapshots', err.stack || err.message);
+      }
     });
 
     // Calculate net worth snapshots - Daily at 11:59 PM
+
     cron.schedule('59 23 * * *', async () => {
-      console.log('[CronJobs] Creating net worth snapshots...');
-      await this.createNetWorthSnapshots();
+      try {
+        console.log('[CronJobs] Creating net worth snapshots...');
+        await this.createNetWorthSnapshots();
+      } catch (err) {
+        console.error('[CronJobs] Error in net worth snapshots:', err);
+        await alertService.notifyAdmin('Cron Failure: Net Worth Snapshots', err.stack || err.message);
+      }
     });
 
     // Historical revaluation (update past snapshots with current rates) - Weekly on Sunday at 3 AM
+
     cron.schedule('0 3 * * 0', async () => {
-      console.log('[CronJobs] Running historical revaluation...');
-      await this.runHistoricalRevaluation();
+      try {
+        console.log('[CronJobs] Running historical revaluation...');
+        await this.runHistoricalRevaluation();
+      } catch (err) {
+        console.error('[CronJobs] Error in historical revaluation:', err);
+        await alertService.notifyAdmin('Cron Failure: Historical Revaluation', err.stack || err.message);
+      }
     });
 
     // Quarterly tax estimate reminders - 1st of each quarter month at 9 AM
+
     cron.schedule('0 9 1 1,4,7,10 *', async () => {
-      console.log('[CronJobs] Sending quarterly tax estimate reminders...');
-      await this.sendQuarterlyTaxReminders();
+      try {
+        console.log('[CronJobs] Sending quarterly tax estimate reminders...');
+        await this.sendQuarterlyTaxReminders();
+      } catch (err) {
+        console.error('[CronJobs] Error in quarterly tax reminders:', err);
+        await alertService.notifyAdmin('Cron Failure: Quarterly Tax Reminders', err.stack || err.message);
+      }
     });
 
     // Year-end tax planning - December 1st at 9 AM
+
     cron.schedule('0 9 1 12 *', async () => {
-      console.log('[CronJobs] Sending year-end tax planning reminders...');
-      await this.sendYearEndTaxPlanningReminders();
+      try {
+        console.log('[CronJobs] Sending year-end tax planning reminders...');
+        await this.sendYearEndTaxPlanningReminders();
+      } catch (err) {
+        console.error('[CronJobs] Error in year-end tax planning reminders:', err);
+        await alertService.notifyAdmin('Cron Failure: Year-End Tax Planning', err.stack || err.message);
+      }
     });
 
     // Tax document generation reminder - March 1st at 9 AM
+
     cron.schedule('0 9 1 3 *', async () => {
-      console.log('[CronJobs] Sending tax document preparation reminders...');
-      await this.sendTaxDocumentReminders();
+      try {
+        console.log('[CronJobs] Sending tax document preparation reminders...');
+        await this.sendTaxDocumentReminders();
+      } catch (err) {
+        console.error('[CronJobs] Error in tax document reminders:', err);
+        await alertService.notifyAdmin('Cron Failure: Tax Document Reminders', err.stack || err.message);
+      }
     });
 
     // Process bill reminders - Daily at 9 AM
