@@ -3,6 +3,7 @@ const Workspace = require('../models/Workspace');
 const WorkspaceInvite = require('../models/WorkspaceInvite');
 const User = require('../models/User');
 const collaborationService = require('../services/collaborationService');
+const workspaceService = require('../services/workspaceService');
 const inviteService = require('../services/inviteService');
 const auth = require('../middleware/auth');
 const { 
@@ -705,6 +706,190 @@ router.get('/:id/activity', auth, checkPermission('audit:view'), async (req, res
   } catch (error) {
     console.error('Get activity log error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// Governance & Policy Management
+// ============================================
+
+/**
+ * Create spending policy
+ * POST /api/workspaces/:workspaceId/policies
+ */
+router.post('/:workspaceId/policies', auth, requireManager, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    const workspace = await Workspace.findById(workspaceId);
+    
+    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+    
+    const { name, description, conditions, approvalChain, actions, riskScore } = req.body;
+    
+    if (!name) return res.status(400).json({ error: 'Policy name required' });
+    
+    const policy = await workspaceService.createPolicy(workspaceId, req.user._id, {
+      name,
+      description,
+      conditions,
+      approvalChain,
+      actions,
+      riskScore
+    });
+    
+    workspace.logActivity('policy:created', req.user._id, { policyId: policy._id });
+    await workspace.save();
+    
+    res.status(201).json({ success: true, data: policy });
+  } catch (error) {
+    console.error('Create policy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get workspace policies
+ * GET /api/workspaces/:workspaceId/policies
+ */
+router.get('/:workspaceId/policies', auth, workspaceAccess, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    const { resourceType, active } = req.query;
+    
+    const policies = await workspaceService.getPolicies(workspaceId, {
+      resourceType,
+      active: active === 'true'
+    });
+    
+    res.json({ success: true, data: policies });
+  } catch (error) {
+    console.error('Get policies error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Update policy
+ * PUT /api/workspaces/:workspaceId/policies/:policyId
+ */
+router.put('/:workspaceId/policies/:policyId', auth, requireManager, async (req, res) => {
+  try {
+    const { workspaceId, policyId } = req.params;
+    
+    const policy = await workspaceService.updatePolicy(
+      workspaceId,
+      policyId,
+      req.user._id,
+      req.body
+    );
+    
+    res.json({ success: true, data: policy });
+  } catch (error) {
+    console.error('Update policy error:', error);
+    res.status(error.message.includes('not found') ? 404 : 500)
+      .json({ error: error.message });
+  }
+});
+
+/**
+ * Delete policy
+ * DELETE /api/workspaces/:workspaceId/policies/:policyId
+ */
+router.delete('/:workspaceId/policies/:policyId', auth, requireManager, async (req, res) => {
+  try {
+    const { workspaceId, policyId } = req.params;
+    
+    await workspaceService.deletePolicy(workspaceId, policyId, req.user._id);
+    
+    res.json({ success: true, message: 'Policy deleted' });
+  } catch (error) {
+    console.error('Delete policy error:', error);
+    res.status(error.message.includes('not found') ? 404 : 500)
+      .json({ error: error.message });
+  }
+});
+
+/**
+ * Get workspace available balance
+ * GET /api/workspaces/:workspaceId/balance
+ */
+router.get('/:workspaceId/balance', auth, workspaceAccess, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    
+    const balance = await workspaceService.calculateAvailableBalance(workspaceId);
+    
+    res.json({ success: true, data: balance });
+  } catch (error) {
+    console.error('Get balance error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get pending approvals
+ * GET /api/workspaces/:workspaceId/approvals/pending
+ */
+router.get('/:workspaceId/approvals/pending', auth, workspaceAccess, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+    
+    const pendingApprovals = await workspaceService.getPendingApprovals(workspaceId, req.user._id);
+    
+    res.json({ success: true, data: pendingApprovals });
+  } catch (error) {
+    console.error('Get pending approvals error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Approve expense
+ * POST /api/workspaces/:workspaceId/expenses/:expenseId/approve
+ */
+router.post('/:workspaceId/expenses/:expenseId/approve', auth, async (req, res) => {
+  try {
+    const { workspaceId, expenseId } = req.params;
+    const { notes } = req.body;
+    
+    const expense = await workspaceService.approveExpense(
+      workspaceId,
+      expenseId,
+      req.user._id,
+      notes
+    );
+    
+    res.json({ success: true, data: expense });
+  } catch (error) {
+    console.error('Approve expense error:', error);
+    res.status(error.message.includes('not found') ? 404 : 500)
+      .json({ error: error.message });
+  }
+});
+
+/**
+ * Reject expense
+ * POST /api/workspaces/:workspaceId/expenses/:expenseId/reject
+ */
+router.post('/:workspaceId/expenses/:expenseId/reject', auth, async (req, res) => {
+  try {
+    const { workspaceId, expenseId } = req.params;
+    const { reason } = req.body;
+    
+    if (!reason) return res.status(400).json({ error: 'Rejection reason required' });
+    
+    const expense = await workspaceService.rejectExpense(
+      workspaceId,
+      expenseId,
+      req.user._id,
+      reason
+    );
+    
+    res.json({ success: true, data: expense });
+  } catch (error) {
+    console.error('Reject expense error:', error);
+    res.status(error.message.includes('not found') ? 404 : 500)
+      .json({ error: error.message });
   }
 });
 
