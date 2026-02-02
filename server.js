@@ -53,7 +53,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com","https://api.github.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com", "https://api.github.com"],
       scriptSrc: [
         "'self'",
         "'unsafe-inline'",
@@ -62,7 +62,7 @@ app.use(helmet({
         "https://api.github.com"
       ],
       scriptSrcAttr: ["'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:", "https://res.cloudinary.com","https://api.github.com"],
+      imgSrc: ["'self'", "data:", "https:", "https://res.cloudinary.com", "https://api.github.com"],
       connectSrc: [
         "'self'",
         "http://localhost:3000",
@@ -189,7 +189,7 @@ io.on('connection', (socket) => {
   socket.on('settlement_action', async (data) => {
     try {
       const { action, settlementId, groupId, paymentDetails, reason } = data;
-      
+
       switch (action) {
         case 'request':
           await settlementService.requestSettlement(settlementId, socket.userId, paymentDetails);
@@ -247,15 +247,14 @@ app.use('/api/tax', require('./routes/tax'));
 
 app.use('/api/accounts', require('./routes/accounts'));
 
-// Express error handler middleware (must be after all routes)
-app.use((err, req, res, next) => {
-  console.error('Express route error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-    error: process.env.NODE_ENV === 'production' ? undefined : err.stack
-  });
-});
+// Import error handling middleware
+const { errorHandler, notFoundHandler } = require('./middleware/errorMiddleware');
+
+// 404 handler for undefined routes (must be before global error handler)
+app.use(notFoundHandler);
+
+// Global error handler middleware (must be after all routes)
+app.use(errorHandler);
 
 // Root route to serve the UI
 app.get('/', (req, res) => {

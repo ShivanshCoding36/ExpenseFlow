@@ -9,72 +9,62 @@ const User = require('../models/User');
 const auth = require('../middleware/auth');
 const { ExpenseSchemas, validateRequest, validateQuery } = require('../middleware/inputValidator');
 const { expenseLimiter, exportLimiter } = require('../middleware/rateLimiter');
+const ResponseFactory = require('../utils/ResponseFactory');
+const { asyncHandler } = require('../middleware/errorMiddleware');
+const { NotFoundError } = require('../utils/AppError');
 const router = express.Router();
 
 // GET all expenses for authenticated user with pagination support
-router.get('/', auth, validateQuery(ExpenseSchemas.filter), async (req, res) => {
-  try {
-    const page = req.query.page || 1;
-    const limit = req.query.limit || 50;
-    const skip = (page - 1) * limit;
+router.get('/', auth, validateQuery(ExpenseSchemas.filter), asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 50;
+  const skip = (page - 1) * limit;
 
-    const user = await User.findById(req.user._id);
+  const user = await User.findById(req.user._id);
 
-    // Workspace filtering
-    const workspaceId = req.query.workspaceId;
-    const query = workspaceId
-      ? { workspace: workspaceId }
-      : { user: req.user._id, workspace: null };
+  // Workspace filtering
+  const workspaceId = req.query.workspaceId;
+  const query = workspaceId
+    ? { workspace: workspaceId }
+    : { user: req.user._id, workspace: null };
 
-    // Get total count for pagination info
-    const total = await Expense.countDocuments(query);
+  // Get total count for pagination info
+  const total = await Expense.countDocuments(query);
 
-    const expenses = await Expense.find(query)
-      .sort({ date: -1 })
-      .skip(skip)
-      .limit(limit);
+  const expenses = await Expense.find(query)
+    .sort({ date: -1 })
+    .skip(skip)
+    .limit(limit);
 
-    // Convert expenses to user's preferred currency if needed
-    const convertedExpenses = await Promise.all(expenses.map(async (expense) => {
-      const expenseObj = expense.toObject();
+  // Convert expenses to user's preferred currency if needed
+  const convertedExpenses = await Promise.all(expenses.map(async (expense) => {
+    const expenseObj = expense.toObject();
 
-      // If expense currency differs from user preference, show converted amount
-      if (expenseObj.originalCurrency !== user.preferredCurrency) {
-        try {
-          const conversion = await currencyService.convertCurrency(
-            expenseObj.originalAmount,
-            expenseObj.originalCurrency,
-            user.preferredCurrency
-          );
-          expenseObj.displayAmount = conversion.convertedAmount;
-          expenseObj.displayCurrency = user.preferredCurrency;
-        } catch (error) {
-          // If conversion fails, use original amount
-          expenseObj.displayAmount = expenseObj.amount;
-          expenseObj.displayCurrency = expenseObj.originalCurrency;
-        }
-      } else {
+    // If expense currency differs from user preference, show converted amount
+    if (expenseObj.originalCurrency !== user.preferredCurrency) {
+      try {
+        const conversion = await currencyService.convertCurrency(
+          expenseObj.originalAmount,
+          expenseObj.originalCurrency,
+          user.preferredCurrency
+        );
+        expenseObj.displayAmount = conversion.convertedAmount;
+        expenseObj.displayCurrency = user.preferredCurrency;
+      } catch (error) {
+        // If conversion fails, use original amount
         expenseObj.displayAmount = expenseObj.amount;
         expenseObj.displayCurrency = expenseObj.originalCurrency;
       }
+    } else {
+      expenseObj.displayAmount = expenseObj.amount;
+      expenseObj.displayCurrency = expenseObj.originalCurrency;
+    }
 
-      return expenseObj;
-    }));
+    return expenseObj;
+  }));
 
-    res.json({
-      success: true,
-      data: convertedExpenses,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  return ResponseFactory.paginated(res, convertedExpenses, page, limit, total);
+}));
 
 // POST new expense for authenticated user
 router.post('/', auth, expenseLimiter, validateRequest(ExpenseSchemas.create), async (req, res) => {
@@ -124,25 +114,25 @@ router.post('/', auth, expenseLimiter, validateRequest(ExpenseSchemas.create), a
     let workflow = null;
 
     if (expenseData.workspace) {
-        requiresApproval = await approvalService.requiresApproval(expenseData, expenseData.workspace);
+      requiresApproval = await approvalService.requiresApproval(expenseData, expenseData.workspace);
     }
 
     if (requiresApproval) {
-        try {
-            workflow = await approvalService.submitForApproval(expense._id, req.user._id);
-            expense.status = 'pending_approval';
-            expense.approvalWorkflow = workflow._id;
-            await expense.save();
-        } catch (approvalError) {
-            console.error('Failed to submit for approval:', approvalError.message);
-            // Continue with normal flow if approval submission fails
-        }
+      try {
+        workflow = await approvalService.submitForApproval(expense._id, req.user._id);
+        expense.status = 'pending_approval';
+        expense.approvalWorkflow = workflow._id;
+        await expense.save();
+      } catch (approvalError) {
+        console.error('Failed to submit for approval:', approvalError.message);
+        // Continue with normal flow if approval submission fails
+      }
     }
 
     // Update budget and goal progress using converted amount if available
     const amountForBudget = expenseData.convertedAmount || value.amount;
     if (value.type === 'expense') {
-        await budgetService.checkBudgetAlerts(req.user._id);
+      await budgetService.checkBudgetAlerts(req.user._id);
     }
     await budgetService.updateGoalProgress(req.user._id, value.type === 'expense' ? -amountForBudget : amountForBudget, value.category);
 

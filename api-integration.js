@@ -110,7 +110,8 @@ async function fetchExpenses(page = 1, limit = 50) {
     if (!response.ok) throw new Error('Failed to fetch expenses');
     const result = await response.json();
 
-    const data = result.success ? result.data : result;
+    // Handle standardized response format: { success: true, data: [...], meta: {...} }
+    const data = result.data || result;
 
     // Save to local DB for future offline use
     for (const expense of data) {
