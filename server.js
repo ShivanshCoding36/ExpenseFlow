@@ -245,6 +245,8 @@ app.use('/api/splits', require('./routes/splits'));
 app.use('/api/workspaces', require('./routes/workspaces'));
 app.use('/api/tax', require('./routes/tax'));
 app.use('/api/forecast', require('./routes/forecast'));
+app.use('/api/debt', require('./routes/debt'));
+
 
 app.use('/api/accounts', require('./routes/accounts'));
 
