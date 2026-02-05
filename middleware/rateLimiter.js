@@ -402,6 +402,30 @@ const userPaymentLimiter = createUserRateLimiter({
   skipSuccessfulRequests: false
 });
 
+/**
+ * Rate limit for 2FA setup initiation
+ * Prevents 2FA setup spam
+ */
+const twoFactorLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Max 5 setup attempts per hour
+  message: 'Too many 2FA setup attempts. Please try again in 1 hour.',
+  prefix: '2fa-setup-limit:',
+  skipSuccessfulRequests: true
+});
+
+/**
+ * Rate limit for 2FA code verification
+ * Prevents brute-force attacks on 2FA codes
+ */
+const verifyCodeLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5, // Max 5 verification attempts per 10 minutes
+  message: 'Too many verification attempts. Please try again in 10 minutes.',
+  prefix: '2fa-verify-limit:',
+  skipSuccessfulRequests: true
+});
+
 // ==================== EXPORTS ====================
 
 module.exports = {
@@ -411,6 +435,8 @@ module.exports = {
   passwordResetLimiter,
   emailVerifyLimiter,
   totpVerifyLimiter,
+  twoFactorLimiter,
+  verifyCodeLimiter,
   
   // Payment & Financial limiters
   paymentLimiter,
