@@ -37,7 +37,7 @@ class CronJobs {
         await alertService.notifyAdmin('Cron Failure: Recurring Reminders', err.stack || err.message);
       }
     });
-    
+
     // Generate recurring invoices - Daily at 6 AM
 
     cron.schedule('0 6 * * *', async () => {
@@ -49,7 +49,7 @@ class CronJobs {
         await alertService.notifyAdmin('Cron Failure: Recurring Invoices', err.stack || err.message);
       }
     });
-    
+
     // Send payment reminders - Daily at 10 AM
 
     cron.schedule('0 10 * * *', async () => {
@@ -61,7 +61,7 @@ class CronJobs {
         await alertService.notifyAdmin('Cron Failure: Payment Reminders', err.stack || err.message);
       }
     });
-    
+
     // Apply late fees - Daily at 12 AM (midnight)
 
     cron.schedule('0 0 * * *', async () => {
@@ -85,7 +85,7 @@ class CronJobs {
         await alertService.notifyAdmin('Cron Failure: Weekly Reports', err.stack || err.message);
       }
     });
-    
+
     // Daily intelligence analysis and insights - Every day at 8 AM
     cron.schedule('0 8 * * *', async () => {
       console.log('[CronJobs] Running daily intelligence analysis...');
@@ -283,7 +283,7 @@ class CronJobs {
     console.log('Sending recurring reminders (Placeholder)');
     // Implementation would go here
   }
-  
+
   static async generateRecurringInvoices() {
     try {
       console.log('[CronJobs] Generating recurring invoices...');
@@ -293,7 +293,7 @@ class CronJobs {
       console.error('[CronJobs] Error generating recurring invoices:', error);
     }
   }
-  
+
   static async sendPaymentReminders() {
     try {
       console.log('[CronJobs] Sending payment reminders...');
@@ -303,13 +303,13 @@ class CronJobs {
       console.error('[CronJobs] Error sending payment reminders:', error);
     }
   }
-  
+
   static async applyLateFees() {
     try {
       console.log('[CronJobs] Applying late fees...');
       const User = require('../models/User');
       const users = await User.find({});
-      
+
       let totalApplied = 0;
       for (const user of users) {
         try {
@@ -319,13 +319,13 @@ class CronJobs {
           console.error(`[CronJobs] Error applying late fees for user ${user._id}:`, error);
         }
       }
-      
+
       console.log(`[CronJobs] Applied late fees to ${totalApplied} invoices`);
     } catch (error) {
       console.error('[CronJobs] Error applying late fees:', error);
     }
   }
-  
+
   static async generateRecurringInvoices() {
     try {
       console.log('[CronJobs] Generating recurring invoices...');
@@ -335,7 +335,7 @@ class CronJobs {
       console.error('[CronJobs] Error generating recurring invoices:', error);
     }
   }
-  
+
   static async sendPaymentReminders() {
     try {
       console.log('[CronJobs] Sending payment reminders...');
@@ -345,13 +345,13 @@ class CronJobs {
       console.error('[CronJobs] Error sending payment reminders:', error);
     }
   }
-  
+
   static async applyLateFees() {
     try {
       console.log('[CronJobs] Applying late fees...');
       const User = require('../models/User');
       const users = await User.find({});
-      
+
       let totalApplied = 0;
       for (const user of users) {
         try {
@@ -361,7 +361,7 @@ class CronJobs {
           console.error(`[CronJobs] Error applying late fees for user ${user._id}:`, error);
         }
       }
-      
+
       console.log(`[CronJobs] Applied late fees to ${totalApplied} invoices`);
     } catch (error) {
       console.error('[CronJobs] Error applying late fees:', error);
@@ -372,11 +372,11 @@ class CronJobs {
     try {
       // Fetch all rates (fiat + crypto)
       const result = await currencyService.fetchAllRates();
-      
+
       if (result.fiat) {
         console.log('[CronJobs] Fiat exchange rates updated successfully');
       }
-      
+
       if (result.crypto) {
         console.log('[CronJobs] Crypto prices updated successfully');
       }
@@ -425,7 +425,7 @@ class CronJobs {
       let errorCount = 0;
 
       // Ensure we have latest exchange rates
-      await currencyService.fetchAllRates().catch(() => {});
+      await currencyService.fetchAllRates().catch(() => { });
       const rates = await currencyService.getAllRates('USD');
 
       for (const userId of usersWithAccounts) {
@@ -468,7 +468,7 @@ class CronJobs {
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
       // Get current rates
-      await currencyService.fetchAllRates().catch(() => {});
+      await currencyService.fetchAllRates().catch(() => { });
       const currentRates = await currencyService.getAllRates('USD');
 
       // Find snapshots from the past week that might need revaluation
@@ -498,7 +498,7 @@ class CronJobs {
           for (const account of snapshot.accounts) {
             const rate = account.currency === snapshot.baseCurrency ? 1 :
               (snapshot.exchangeRates.get(account.currency) || currentRates.rates[account.currency] || 1);
-            
+
             const balanceInBase = account.balance * rate;
             const effectiveBalance = ['credit_card', 'loan'].includes(account.type)
               ? -Math.abs(balanceInBase)
@@ -690,12 +690,12 @@ class CronJobs {
   static async sendQuarterlyTaxReminders() {
     try {
       const profiles = await TaxProfile.getProfilesNeedingQuarterlyEstimates();
-      
+
       for (const profile of profiles) {
         const upcomingPayments = profile.estimated_tax_payments.filter(
           p => !p.paid && p.due_date >= new Date() && p.due_date <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         );
-        
+
         if (upcomingPayments.length > 0) {
           for (const payment of upcomingPayments) {
             await emailService.sendEmail({
@@ -712,7 +712,7 @@ class CronJobs {
           }
         }
       }
-      
+
       console.log(`Sent quarterly tax reminders to ${profiles.length} users`);
     } catch (error) {
       console.error('Quarterly tax reminder error:', error);
@@ -723,16 +723,16 @@ class CronJobs {
     try {
       const users = await User.find({});
       const currentYear = new Date().getFullYear();
-      
+
       for (const user of users) {
         try {
           const profile = await TaxProfile.getUserProfile(user._id);
-          
+
           if (profile) {
             // Generate year-end checklist
             const harvest = await taxOptimizationService.identifyTaxLossHarvestingOpportunities(user._id, currentYear);
             const contributionRoom = taxOptimizationService.calculateContributionRoom(profile);
-            
+
             await emailService.sendEmail({
               to: user.email,
               subject: 'Year-End Tax Planning Checklist',
@@ -755,7 +755,7 @@ class CronJobs {
           console.error(`Error processing user ${user._id}:`, userError);
         }
       }
-      
+
       console.log(`Sent year-end tax planning reminders to ${users.length} users`);
     } catch (error) {
       console.error('Year-end tax planning reminder error:', error);
@@ -766,10 +766,10 @@ class CronJobs {
     try {
       const users = await User.find({});
       const lastYear = new Date().getFullYear() - 1;
-      
+
       for (const user of users) {
         const profile = await TaxProfile.getUserProfile(user._id);
-        
+
         if (profile) {
           await emailService.sendEmail({
             to: user.email,
@@ -790,7 +790,7 @@ class CronJobs {
           });
         }
       }
-      
+
       console.log(`Sent tax document reminders to ${users.length} users`);
     } catch (error) {
       console.error('Tax document reminder error:', error);
@@ -812,7 +812,7 @@ class CronJobs {
       const Bill = require('../models/Bill');
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       // Update bills that are now overdue
       const result = await Bill.updateMany(
         {
@@ -823,17 +823,17 @@ class CronJobs {
           status: 'overdue'
         }
       );
-      
+
       console.log(`[CronJobs] Updated ${result.modifiedCount} bills to overdue status`);
-      
+
       // Create overdue reminders
       const overdueBills = await Bill.find({ status: 'overdue' }).populate('user', 'email name');
       const ReminderSchedule = require('../models/ReminderSchedule');
-      
+
       for (const bill of overdueBills) {
         await ReminderSchedule.createOverdueReminder(bill);
       }
-      
+
       console.log(`[CronJobs] Created overdue reminders for ${overdueBills.length} bills`);
     } catch (error) {
       console.error('[CronJobs] Check overdue bills error:', error);
@@ -854,9 +854,9 @@ class CronJobs {
     try {
       const User = require('../models/User');
       const CalendarEvent = require('../models/CalendarEvent');
-      
+
       const users = await User.find({});
-      
+
       for (const user of users) {
         try {
           await CalendarEvent.syncBillEvents(user._id);
@@ -864,7 +864,7 @@ class CronJobs {
           console.error(`[CronJobs] Calendar sync error for user ${user._id}:`, userError);
         }
       }
-      
+
       console.log(`[CronJobs] Calendar synced for ${users.length} users`);
     } catch (error) {
       console.error('[CronJobs] Calendar sync error:', error);
@@ -880,25 +880,25 @@ class CronJobs {
       console.error('[CronJobs] Pending reminders error:', error);
     }
   }
-  
+
   static async runIntelligenceAnalysis() {
     try {
-      const users = await User.find({ 
+      const users = await User.find({
         intelligencePreferences: { $exists: true },
-        'intelligencePreferences.enablePredictiveAnalysis': true 
+        'intelligencePreferences.enablePredictiveAnalysis': true
       });
-      
+
       let analyzed = 0;
       let alertsSent = 0;
-      
+
       for (const user of users) {
         try {
           // Generate insights
           const insights = await intelligenceService.generateInsights(user._id);
-          
+
           // Send email for critical alerts
           const criticalInsights = insights.insights.filter(i => i.priority === 'critical' || i.priority === 'high');
-          
+
           if (criticalInsights.length > 0 && user.intelligencePreferences.emailAlerts) {
             await emailService.sendEmail({
               to: user.email,
@@ -912,13 +912,13 @@ class CronJobs {
             });
             alertsSent++;
           }
-          
+
           analyzed++;
         } catch (userError) {
           console.error(`[CronJobs] Intelligence analysis error for user ${user._id}:`, userError);
         }
       }
-      
+
       console.log(`[CronJobs] Intelligence analysis complete: ${analyzed} users analyzed, ${alertsSent} alerts sent`);
     } catch (error) {
       console.error('[CronJobs] Intelligence analysis error:', error);
@@ -948,25 +948,25 @@ class CronJobs {
       console.log('[CronJobs] Starting weekly wellness scan...');
       const User = require('../models/User');
       const users = await User.find({});
-      
+
       let scanned = 0;
       let scoresGenerated = 0;
-      
+
       for (const user of users) {
         try {
           // Calculate health score
           const healthScore = await wellnessService.calculateHealthScore(user._id, { timeWindow: 30 });
-          
+
           // Run comprehensive analysis
           await analysisEngine.runComprehensiveAnalysis(user._id);
-          
+
           scoresGenerated++;
           scanned++;
         } catch (userError) {
           console.error(`[CronJobs] Wellness scan error for user ${user._id}:`, userError);
         }
       }
-      
+
       console.log(`[CronJobs] Weekly wellness scan complete: ${scanned} users scanned, ${scoresGenerated} scores generated`);
     } catch (error) {
       console.error('[CronJobs] Weekly wellness scan error:', error);
@@ -978,29 +978,152 @@ class CronJobs {
       console.log('[CronJobs] Generating daily insights...');
       const User = require('../models/User');
       const users = await User.find({});
-      
+
       let processed = 0;
       let insightsGenerated = 0;
-      
+
       for (const user of users) {
         try {
           // Analyze spending velocity
           const velocityResult = await analysisEngine.analyzeSpendingVelocity(user._id, { timeWindow: 7 });
           insightsGenerated += velocityResult.insights?.length || 0;
-          
+
           // Analyze budget predictions
           const budgetResult = await analysisEngine.analyzeBudgetPredictions(user._id);
           insightsGenerated += budgetResult.insights?.length || 0;
-          
+
           processed++;
         } catch (userError) {
           console.error(`[CronJobs] Insight generation error for user ${user._id}:`, userError);
         }
       }
-      
+
       console.log(`[CronJobs] Daily insights complete: ${processed} users processed, ${insightsGenerated} insights generated`);
     } catch (error) {
       console.error('[CronJobs] Daily insights error:', error);
+    }
+  }
+
+  /**
+   * Generate daily forecasts for all users
+   * Issue #522: Intelligent Cash Flow Forecasting & Runway Analytics
+   */
+  static async generateDailyForecasts() {
+    try {
+      console.log('[CronJobs] Generating daily forecasts...');
+      const User = require('../models/User');
+      const cashFlowForecastService = require('./cashFlowForecastService');
+
+      const users = await User.find({});
+      let generated = 0;
+      let errors = 0;
+
+      for (const user of users) {
+        try {
+          await cashFlowForecastService.generateForecast(user._id, {
+            projectionDays: 180,
+            includeScenarios: true
+          });
+          generated++;
+        } catch (error) {
+          console.error(`[CronJobs] Forecast generation error for user ${user._id}:`, error.message);
+          errors++;
+        }
+      }
+
+      console.log(`[CronJobs] Daily forecasts complete: ${generated} generated, ${errors} errors`);
+    } catch (error) {
+      console.error('[CronJobs] Daily forecasts error:', error);
+    }
+  }
+
+  /**
+   * Run daily anomaly detection
+   */
+  static async runDailyAnomalyDetection() {
+    try {
+      console.log('[CronJobs] Running daily anomaly detection...');
+      const anomalyDetectionService = require('./anomalyDetectionService');
+      const User = require('../models/User');
+
+      const users = await User.find({});
+      let detected = 0;
+
+      for (const user of users) {
+        try {
+          const result = await anomalyDetectionService.detectAnomalies(user._id, {
+            timeWindow: 30,
+            sensitivityLevel: 'medium'
+          });
+          detected += result.anomalies?.length || 0;
+        } catch (error) {
+          console.error(`[CronJobs] Anomaly detection error for user ${user._id}:`, error.message);
+        }
+      }
+
+      console.log(`[CronJobs] Anomaly detection complete: ${detected} anomalies detected`);
+    } catch (error) {
+      console.error('[CronJobs] Anomaly detection error:', error);
+    }
+  }
+
+  /**
+   * Update forecast accuracy by comparing predictions to actual outcomes
+   */
+  static async updateForecastAccuracy() {
+    try {
+      console.log('[CronJobs] Updating forecast accuracy...');
+      const ForecastSnapshot = require('../models/ForecastSnapshot');
+      const Account = require('../models/Account');
+
+      // Find forecasts from 7 days ago
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const forecasts = await ForecastSnapshot.find({
+        forecastDate: {
+          $gte: new Date(sevenDaysAgo.getTime() - 24 * 60 * 60 * 1000),
+          $lte: new Date(sevenDaysAgo.getTime() + 24 * 60 * 60 * 1000)
+        }
+      });
+
+      let updated = 0;
+
+      for (const forecast of forecasts) {
+        try {
+          // Get current actual balance
+          const accounts = await Account.getUserAccounts(forecast.user);
+          const actualBalance = accounts.reduce((sum, acc) => {
+            if (acc.type === 'credit_card' || acc.type === 'loan') {
+              return sum - Math.abs(acc.balance);
+            }
+            return sum + acc.balance;
+          }, 0);
+
+          // Find the predicted balance for today
+          const todayDataPoint = forecast.dataPoints.find(dp => {
+            const dpDate = new Date(dp.date);
+            const today = new Date();
+            return dpDate.toDateString() === today.toDateString();
+          });
+
+          if (todayDataPoint) {
+            const accuracyPercentage = 100 - Math.abs(
+              ((todayDataPoint.predictedBalance - actualBalance) / actualBalance) * 100
+            );
+
+            // Store accuracy in metadata (would need schema update for formal tracking)
+            console.log(`[CronJobs] User ${forecast.user}: Predicted ${todayDataPoint.predictedBalance.toFixed(2)}, Actual ${actualBalance.toFixed(2)}, Accuracy: ${accuracyPercentage.toFixed(2)}%`);
+            updated++;
+          }
+        } catch (error) {
+          console.error(`[CronJobs] Error updating forecast accuracy for ${forecast._id}:`, error.message);
+        }
+      }
+
+      console.log(`[CronJobs] Forecast accuracy update complete: ${updated} forecasts validated`);
+    } catch (error) {
+      console.error('[CronJobs] Forecast accuracy update error:', error);
     }
   }
 }

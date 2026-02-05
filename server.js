@@ -158,6 +158,10 @@ mongoose.connect(process.env.MONGODB_URI)
     // Initialize cron jobs after DB connection
     CronJobs.init();
     console.log('Email cron jobs initialized');
+    
+    // Initialize backup scheduling
+    // Issue #462: Automated Backup System for Financial Data
+    initializeBackupScheduling();
   })
   .catch(err => console.error('MongoDB connection error:', err));
 
@@ -241,26 +245,13 @@ console.log('Collaboration handler initialized');
 // Routes
 app.use('/api/auth', require('./middleware/rateLimiter').authLimiter, authRoutes);
 app.use('/api/currency', require('./routes/currency'));
-app.use('/api/user', protect, require('./routes/user'));
-app.use('/api/expenses', require('./middleware/rateLimiter').expenseLimiter, protect, expenseRoutes);
-app.use('/api/transactions', require('./middleware/rateLimiter').expenseLimiter, protect, require('./routes/transactions'));
-app.use('/api/sync', protect, syncRoutes);
-app.use('/api/rules', protect, require('./routes/rules'));
-app.use('/api/notifications', protect, require('./routes/notifications'));
-app.use('/api/receipts', require('./middleware/rateLimiter').uploadLimiter, protect, require('./routes/receipts'));
-app.use('/api/budgets', protect, require('./routes/budgets'));
-app.use('/api/goals', protect, require('./routes/goals'));
-app.use('/api/analytics', protect, require('./routes/analytics'));
-app.use('/api/groups', protect, require('./routes/groups'));
-app.use('/api/splits', protect, require('./routes/splits'));
-app.use('/api/workspaces', protect, require('./routes/workspaces'));
-app.use('/api/tax', protect, require('./routes/tax'));
-app.use('/api/bills', protect, require('./routes/bills'));
-app.use('/api/calendar', protect, require('./routes/calendar'));
-app.use('/api/reminders', protect, require('./routes/reminders'));
-app.use('/api/audit', protect, require('./routes/audit'));
-app.use('/api/subscriptions', protect, require('./routes/subscriptions'));
+app.use('/api/groups', require('./routes/groups'));
+app.use('/api/splits', require('./routes/splits'));
+app.use('/api/workspaces', require('./routes/workspaces'));
+app.use('/api/tax', require('./routes/tax'));
+app.use('/api/backups', backupRoutes); // Issue #462: Backup Management API
 app.use('/api/accounts', require('./routes/accounts'));
+app.use('/api/2fa', require('./middleware/auth'), twoFactorAuthRoutes); // Issue #503: 2FA Management
 
 // Import error handling middleware
 const { errorHandler, notFoundHandler } = require('./middleware/errorMiddleware');
@@ -270,6 +261,106 @@ app.use(notFoundHandler);
 
 // Global error handler middleware (must be after all routes)
 app.use(errorHandler);
+
+/**
+ * Initialize Automated Backup Scheduling
+ * Issue #462: Automated Backup System for Financial Data
+ * 
+ * Schedules three backup types:
+ * - Daily backups at 2:00 AM UTC (retains last 7 days)
+ * - Weekly backups on Sundays at 3:00 AM UTC (retains last 4 weeks)
+ * - Monthly backups on 1st of month at 4:00 AM UTC (indefinite retention)
+ */
+async function initializeBackupScheduling() {
+  try {
+    console.log('Initializing automated backup scheduling...');
+
+    // Daily backup - Every day at 2:00 AM UTC
+    cron.schedule('0 2 * * *', async () => {
+      try {
+        console.log('[BACKUP] Starting daily backup...');
+        const result = await backupService.createDatabaseBackup();
+        console.log('[BACKUP] Daily backup completed successfully');
+        backupService.logBackup({
+          type: 'daily',
+          size: result.size,
+          status: 'success',
+          destination: result.destination
+        });
+      } catch (error) {
+        console.error('[BACKUP] Daily backup failed:', error);
+        backupService.logBackup({
+          type: 'daily',
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }, { timezone: 'UTC' });
+
+    // Weekly backup - Every Sunday at 3:00 AM UTC
+    cron.schedule('0 3 * * 0', async () => {
+      try {
+        console.log('[BACKUP] Starting weekly backup...');
+        const result = await backupService.createDatabaseBackup();
+        console.log('[BACKUP] Weekly backup completed successfully');
+        backupService.logBackup({
+          type: 'weekly',
+          size: result.size,
+          status: 'success',
+          destination: result.destination
+        });
+      } catch (error) {
+        console.error('[BACKUP] Weekly backup failed:', error);
+        backupService.logBackup({
+          type: 'weekly',
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }, { timezone: 'UTC' });
+
+    // Monthly backup - 1st of every month at 4:00 AM UTC
+    cron.schedule('0 4 1 * *', async () => {
+      try {
+        console.log('[BACKUP] Starting monthly backup...');
+        const result = await backupService.createDatabaseBackup();
+        console.log('[BACKUP] Monthly backup completed successfully');
+        backupService.logBackup({
+          type: 'monthly',
+          size: result.size,
+          status: 'success',
+          destination: result.destination
+        });
+      } catch (error) {
+        console.error('[BACKUP] Monthly backup failed:', error);
+        backupService.logBackup({
+          type: 'monthly',
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }, { timezone: 'UTC' });
+
+    // Cleanup old backups - Daily at 5:00 AM UTC
+    cron.schedule('0 5 * * *', async () => {
+      try {
+        console.log('[BACKUP] Running retention policy cleanup...');
+        const result = await backupService.applyRetentionPolicy();
+        console.log('[BACKUP] Retention policy applied. Removed:', result.removed);
+      } catch (error) {
+        console.error('[BACKUP] Retention policy failed:', error);
+      }
+    }, { timezone: 'UTC' });
+
+    console.log('✓ Backup scheduling initialized successfully');
+    console.log('  - Daily backups: 2:00 AM UTC');
+    console.log('  - Weekly backups: Sundays 3:00 AM UTC');
+    console.log('  - Monthly backups: 1st of month 4:00 AM UTC');
+    console.log('  - Cleanup: Daily 5:00 AM UTC');
+  } catch (error) {
+    console.error('Failed to initialize backup scheduling:', error);
+  }
+}
 
 // Root route to serve the UI
 app.get('/', (req, res) => {

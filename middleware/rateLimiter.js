@@ -1,6 +1,4 @@
 const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis');
-const redis = require('redis');
 
 /**
  * Enhanced Rate Limiting Middleware
@@ -12,7 +10,13 @@ const redis = require('redis');
 
 // Optional: Use Redis for distributed rate limiting
 let redisClient = null;
+let RedisStore = null;
+
 try {
+  // Try to load Redis modules only if they are installed
+  RedisStore = require('rate-limit-redis');
+  const redis = require('redis');
+  
   redisClient = redis.createClient({
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT || 6379,
@@ -23,8 +27,9 @@ try {
     redisClient = null;
   });
 } catch (error) {
-  console.warn('Redis client initialization failed, using in-memory store');
+  console.warn('Redis modules not installed, using in-memory store. To enable Redis, install: npm install redis rate-limit-redis');
   redisClient = null;
+  RedisStore = null;
 }
 
 /**
@@ -48,7 +53,7 @@ const createRateLimiter = (options) => {
   };
 
   // Use Redis store if available, otherwise use memory store
-  if (redisClient && options.useRedis !== false) {
+  if (redisClient && RedisStore && options.useRedis !== false) {
     config.store = new RedisStore({
       client: redisClient,
       prefix: options.prefix || 'rate-limit:'
@@ -397,6 +402,30 @@ const userPaymentLimiter = createUserRateLimiter({
   skipSuccessfulRequests: false
 });
 
+/**
+ * Rate limit for 2FA setup initiation
+ * Prevents 2FA setup spam
+ */
+const twoFactorLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Max 5 setup attempts per hour
+  message: 'Too many 2FA setup attempts. Please try again in 1 hour.',
+  prefix: '2fa-setup-limit:',
+  skipSuccessfulRequests: true
+});
+
+/**
+ * Rate limit for 2FA code verification
+ * Prevents brute-force attacks on 2FA codes
+ */
+const verifyCodeLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5, // Max 5 verification attempts per 10 minutes
+  message: 'Too many verification attempts. Please try again in 10 minutes.',
+  prefix: '2fa-verify-limit:',
+  skipSuccessfulRequests: true
+});
+
 // ==================== EXPORTS ====================
 
 module.exports = {
@@ -406,6 +435,8 @@ module.exports = {
   passwordResetLimiter,
   emailVerifyLimiter,
   totpVerifyLimiter,
+  twoFactorLimiter,
+  verifyCodeLimiter,
   
   // Payment & Financial limiters
   paymentLimiter,
@@ -438,6 +469,10 @@ module.exports = {
   userLoginLimiter,
   userExpenseLimiter,
   userPaymentLimiter,
+  
+  // Aliases for backward compatibility
+  authLimiter: loginLimiter,
+  uploadLimiter: fileUploadLimiter,
   
   // Utility
   createRateLimiter,
