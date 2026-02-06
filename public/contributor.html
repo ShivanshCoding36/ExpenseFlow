@@ -27,6 +27,7 @@
 
     <title>Contributors | ExpenseFlow</title>
     <link rel="stylesheet" href="expensetracker.css" />
+    <link rel="stylesheet" href="index.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
@@ -397,42 +398,57 @@
 </script>
 
 
+  <!-- Header -->
+  <header class="header">
+    <nav class="navbar">
+      <div class="nav-container">
+        <div class="nav-logo">
+          <i class="fas fa-wallet"></i>
+          <span>ExpenseFlow</span>
+        </div>
+        <div class="nav-menu" id="nav-menu">
+          <a href="dashboard.html" class="nav-link ">Dashboard</a>
+          <a href="accounts.html" class="nav-link">Accounts</a>
+          <a href="analytics.html" class="nav-link ">Analytics</a>
+          <a href="goals.html" class="nav-link ">Goals</a>
 
-    <!-- Header -->
-    <header class="header">
-        <nav class="navbar">
-            <div class="nav-container">
-                <div class="nav-logo">
-                    <i class="fas fa-wallet"></i>
-                    <span>ExpenseFlow</span>
-                </div>
-                <div class="nav-menu" id="nav-menu">
-                    <a href="./index.html" class="nav-link">Dashboard</a>
-                    <a href="#analytics" class="nav-link">Analytics</a>
-                    <a href="#goals" class="nav-link">Goals</a>
-                    <a href="#settings" class="nav-link">Settings</a>
-                    <a href="#contributors" class="nav-link active">Contributors</a>
-                </div>
-                <div class="nav-toggle" id="nav-toggle">
-                    <span class="bar"></span>
-                    <span class="bar"></span>
-                    <span class="bar"></span>
-                </div>
-                <div class="user-profile">
-                    <button class="currency-btn" onclick="openCurrencyModal()" title="Currency Settings">
-                        <i class="fas fa-coins"></i>
-                        <span id="current-currency">INR</span>
-                    </button>
-                    <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop&crop=face"
-                        alt="User" class="profile-img" />
-                    <span class="username" id="navUsername"></span>
-                    <div id="redirect">
-                        <a href="#" id="logoutLink" onclick="logout()">Logout</a>
-                    </div>
-                </div>
+          <div class="nav-item dropdown">
+            <a href="#" class="nav-link dropdown-toggle">More</a>
+            <div class="dropdown-menu">
+              <a href="Monthlysummary.html" class="dropdown-link">Summary</a>
+              <a href="settings.html" class="dropdown-link">Overview</a>
+              <a href="./contributor.html" class="dropdown-link active">Contributors</a>
             </div>
-        </nav>
-    </header>
+          </div>
+        </div>
+        
+        <div class="nav-toggle" id="nav-toggle">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </div>
+        <div class="user-profile">
+          <div id="workspace-selector" class="workspace-selector"></div>
+          <select id="language-switcher" class="language-select" aria-label="Language">
+            <option value="en">EN</option>
+            <option value="es">ES</option>
+            <option value="fr">FR</option>
+          </select>
+          <button class="currency-btn" onclick="openCurrencyModal()" title="Currency Settings">
+            <i class="fas fa-coins"></i>
+            <span id="current-currency">INR</span>
+          </button>
+          <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop&crop=face"
+            alt="User" class="profile-img">
+          <span class="username" id="navUsername"></span>
+          <div id="redirect">
+            <a href="#" id="logoutLink" onclick="logout()">Logout</a>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+
 
     <!-- Main Content -->
     <main class="main-content contributors-page">
@@ -508,7 +524,6 @@
         </div>
     </footer>
 
-    <script src="auth-check.js"></script>
     <script src="auth.js"></script>
 
     <script>
