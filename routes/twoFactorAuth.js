@@ -395,4 +395,140 @@ router.get('/audit-log', auth, async (req, res) => {
   }
 });
 
+/**
+ * GET /2fa/security-profile
+ * Get user security profile and risk assessment
+ * Issue #504: Security monitoring
+ */
+router.get('/security-profile', auth, async (req, res) => {
+  try {
+    const profile = await twoFactorAuthService.getUserSecurityProfile(req.user.id, 24);
+    res.json({
+      success: true,
+      profile
+    });
+  } catch (error) {
+    console.error('Error getting security profile:', error);
+    res.status(500).json({ error: 'Failed to get security profile' });
+  }
+});
+
+/**
+ * GET /2fa/security-events
+ * Get recent security events
+ * Issue #504: Security event tracking
+ */
+router.get('/security-events', auth, async (req, res) => {
+  try {
+    const SecurityEvent = require('../models/SecurityEvent');
+    const hours = parseInt(req.query.hours) || 24;
+    const limit = parseInt(req.query.limit) || 50;
+
+    const events = await SecurityEvent.getRecentEvents(req.user.id, hours, limit);
+
+    res.json({
+      success: true,
+      count: events.length,
+      events
+    });
+  } catch (error) {
+    console.error('Error getting security events:', error);
+    res.status(500).json({ error: 'Failed to get security events' });
+  }
+});
+
+/**
+ * POST /2fa/check-suspicious-activity
+ * Manually check for suspicious activity
+ * Issue #504: Suspicious login detection
+ */
+router.post('/check-suspicious-activity', auth, async (req, res) => {
+  try {
+    const loginInfo = {
+      ipAddress: req.body.ipAddress || req.ip,
+      userAgent: req.body.userAgent || req.get('User-Agent'),
+      deviceFingerprint: req.body.deviceFingerprint || req.headers['x-device-fingerprint'],
+      location: req.body.location
+    };
+
+    const analysis = await twoFactorAuthService.checkSuspiciousLogin(req.user.id, loginInfo);
+
+    res.json({
+      success: true,
+      analysis
+    });
+  } catch (error) {
+    console.error('Error checking suspicious activity:', error);
+    res.status(500).json({ error: 'Failed to check suspicious activity' });
+  }
+});
+
+/**
+ * GET /2fa/trusted-devices
+ * Get list of trusted devices
+ * Issue #504: Device fingerprinting
+ */
+router.get('/trusted-devices', auth, async (req, res) => {
+  try {
+    const TrustedDevice = require('../models/TrustedDevice');
+    const devices = await TrustedDevice.find({
+      userId: req.user.id,
+      isActive: true
+    })
+      .select('-verificationCode')
+      .sort({ verifiedAt: -1 });
+
+    res.json({
+      success: true,
+      devices
+    });
+  } catch (error) {
+    console.error('Error getting trusted devices:', error);
+    res.status(500).json({ error: 'Failed to get trusted devices' });
+  }
+});
+
+/**
+ * DELETE /2fa/trusted-devices/:deviceId
+ * Revoke trusted device
+ * Issue #504: Device management
+ */
+router.delete('/trusted-devices/:deviceId', auth, async (req, res) => {
+  try {
+    const TrustedDevice = require('../models/TrustedDevice');
+    
+    const device = await TrustedDevice.findOne({
+      _id: req.params.deviceId,
+      userId: req.user.id
+    });
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
+    }
+
+    device.isActive = false;
+    device.revokedAt = new Date();
+    await device.save();
+
+    await AuditLog.create({
+      userId: req.user.id,
+      action: 'TRUSTED_DEVICE_REVOKED',
+      actionType: 'security',
+      resourceType: 'TrustedDevice',
+      resourceId: device._id,
+      details: {
+        deviceName: device.deviceName
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Device revoked successfully'
+    });
+  } catch (error) {
+    console.error('Error revoking device:', error);
+    res.status(500).json({ error: 'Failed to revoke device' });
+  }
+});
+
 module.exports = router;

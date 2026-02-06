@@ -5,8 +5,10 @@ const TwoFactorAuth = require('../models/TwoFactorAuth');
 const TrustedDevice = require('../models/TrustedDevice');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const SecurityEvent = require('../models/SecurityEvent');
 const emailService = require('./emailService');
 const fp = require('fingerprint-generator');
+const suspiciousLoginDetectionService = require('./suspiciousLoginDetectionService');
 
 /**
  * 2FA Service
@@ -653,6 +655,127 @@ class TwoFactorAuthService {
     } catch (error) {
       console.error('Error verifying 2FA code:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Validate session after successful 2FA verification
+   * Issue #504: Session validation after 2FA
+   * @param {string} userId - User ID
+   * @param {string} sessionId - Session ID
+   * @param {object} loginInfo - Login information (ipAddress, userAgent, deviceFingerprint)
+   * @returns {Promise<boolean>}
+   */
+  async validateSessionAfter2FA(userId, sessionId, loginInfo) {
+    try {
+      // Use suspicious login detection service to validate
+      const isValid = await suspiciousLoginDetectionService.validateSessionAfter2FA(
+        userId,
+        sessionId,
+        loginInfo
+      );
+
+      return isValid;
+    } catch (error) {
+      console.error('Error validating session after 2FA:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enforce backup code one-time use
+   * Issue #504: Backup code one-time use
+   * @param {string} userId - User ID
+   * @param {string} backupCode - Backup code to verify
+   * @returns {Promise<boolean>}
+   */
+  async verifyBackupCodeWithOneTimeUse(userId, backupCode) {
+    try {
+      // First validate that code hasn't been used recently
+      await suspiciousLoginDetectionService.validateBackupCodeOneTimeUse(userId, backupCode);
+
+      // Then verify the actual backup code
+      return await this.verifyBackupCode(userId, backupCode);
+    } catch (error) {
+      console.error('Error verifying backup code with one-time use enforcement:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check for suspicious login patterns
+   * Issue #504: Suspicious login detection
+   * @param {string} userId - User ID
+   * @param {object} loginInfo - Login information
+   * @returns {Promise<{isSuspicious: boolean, riskScore: number, flags: []}>}
+   */
+  async checkSuspiciousLogin(userId, loginInfo) {
+    try {
+      return await suspiciousLoginDetectionService.analyzeLoginAttempt(userId, loginInfo);
+    } catch (error) {
+      console.error('Error checking suspicious login:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check for brute force attempts
+   * Issue #504: Brute force detection
+   * @param {string} userId - User ID
+   * @param {string} ipAddress - IP address
+   * @returns {Promise<{isBruteForce: boolean, attemptCount: number}>}
+   */
+  async checkBruteForceAttempt(userId, ipAddress) {
+    try {
+      return await suspiciousLoginDetectionService.checkBruteForcePattern(userId, ipAddress);
+    } catch (error) {
+      console.error('Error checking brute force attempt:', error);
+      return { isBruteForce: false, attemptCount: 0 };
+    }
+  }
+
+  /**
+   * Get user's risk profile
+   * Issue #504: Security monitoring
+   * @param {string} userId - User ID
+   * @param {number} hours - Time window to analyze (default: 24)
+   * @returns {Promise<object>}
+   */
+  async getUserSecurityProfile(userId, hours = 24) {
+    try {
+      return await suspiciousLoginDetectionService.getUserRiskProfile(userId, hours);
+    } catch (error) {
+      console.error('Error getting user security profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Log 2FA attempt with security context
+   * Issue #504: Security event logging
+   * @param {string} userId - User ID
+   * @param {string} eventType - Event type
+   * @param {object} details - Event details
+   * @returns {Promise<void>}
+   */
+  async log2FASecurityEvent(userId, eventType, details = {}) {
+    try {
+      await SecurityEvent.logEvent({
+        userId,
+        eventType: eventType.includes('SUCCESS') ? '2FA_SUCCESS' :
+                   eventType.includes('FAILURE') ? '2FA_FAILURE' :
+                   eventType.includes('BACKUP') ? 'BACKUP_CODE_ATTEMPT' : '2FA_ATTEMPT',
+        severity: details.severity || 'medium',
+        source: '2fa_verification',
+        ipAddress: details.ipAddress,
+        userAgent: details.userAgent,
+        deviceFingerprint: details.deviceFingerprint,
+        location: details.location,
+        details,
+        riskScore: details.riskScore || 0
+      });
+    } catch (error) {
+      console.error('Error logging 2FA security event:', error);
     }
   }
 }
