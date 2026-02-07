@@ -11,6 +11,7 @@ const {
 const { validateRequest } = require('../middleware/inputValidator');
 const { twoFactorLimiter, verifyCodeLimiter } = require('../middleware/rateLimiter');
 const twoFactorAuthService = require('../services/twoFactorAuthService');
+const accountTakeoverAlertingService = require('../services/accountTakeoverAlertingService');
 const TwoFactorAuth = require('../models/TwoFactorAuth');
 const AuditLog = require('../models/AuditLog');
 
@@ -83,6 +84,26 @@ router.post('/setup/verify', auth, verifyCodeLimiter, async (req, res) => {
       }
     });
 
+    // Trigger account takeover alert for 2FA enable
+    try {
+      await accountTakeoverAlertingService.alertTwoFAChange(
+        req.user.id,
+        {
+          action: 'enabled',
+          method: 'totp',
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending 2FA change alert:', alertError);
+    }
+
     res.json({
       success: true,
       backupCodes: result.backupCodes,
@@ -133,6 +154,26 @@ router.post('/disable', auth, async (req, res) => {
 
     const result = await twoFactorAuthService.disableTwoFactorAuth(req.user.id, password);
 
+    // Trigger account takeover alert for 2FA disable (CRITICAL)
+    try {
+      await accountTakeoverAlertingService.alertTwoFAChange(
+        req.user.id,
+        {
+          action: 'disabled',
+          method: null,
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending 2FA disable alert:', alertError);
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Error disabling 2FA:', error);
@@ -147,6 +188,26 @@ router.post('/disable', auth, async (req, res) => {
 router.post('/backup-codes/regenerate', auth, async (req, res) => {
   try {
     const codes = await twoFactorAuthService.regenerateBackupCodes(req.user.id);
+
+    // Trigger account takeover alert for backup codes regeneration
+    try {
+      await accountTakeoverAlertingService.alertTwoFAChange(
+        req.user.id,
+        {
+          action: 'backup_codes_regenerated',
+          method: null,
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending backup codes alert:', alertError);
+    }
 
     res.json({
       success: true,
@@ -172,6 +233,26 @@ router.post('/method/switch', auth, async (req, res) => {
     }
 
     const result = await twoFactorAuthService.switchTwoFactorMethod(req.user.id, method);
+
+    // Trigger account takeover alert for method change
+    try {
+      await accountTakeoverAlertingService.alertTwoFAChange(
+        req.user.id,
+        {
+          action: 'method_changed',
+          method: method,
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending 2FA method change alert:', alertError);
+    }
 
     res.json(result);
   } catch (error) {
@@ -424,6 +505,26 @@ router.post('/email/verify', auth, verifyCodeLimiter, async (req, res) => {
       }
     });
 
+    // Trigger account takeover alert for 2FA enable
+    try {
+      await accountTakeoverAlertingService.alertTwoFAChange(
+        req.user.id,
+        {
+          action: 'enabled',
+          method: 'email',
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending 2FA change alert:', alertError);
+    }
+
     res.json({
       success: true,
       backupCodes: result.backupCodes,
@@ -522,6 +623,26 @@ router.post('/sms/verify', auth, verifyCodeLimiter, async (req, res) => {
         method: 'sms'
       }
     });
+
+    // Trigger account takeover alert for 2FA enable
+    try {
+      await accountTakeoverAlertingService.alertTwoFAChange(
+        req.user.id,
+        {
+          action: 'enabled',
+          method: 'sms',
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending 2FA change alert:', alertError);
+    }
 
     res.json({
       success: true,
