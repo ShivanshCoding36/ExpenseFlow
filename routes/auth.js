@@ -7,6 +7,7 @@ const AuditLog = require('../models/AuditLog');
 const emailService = require('../services/emailService');
 const securityMonitor = require('../services/securityMonitor');
 const SecurityService = require('../services/securityService');
+const accountTakeoverAlertingService = require('../services/accountTakeoverAlertingService');
 const auth = require('../middleware/auth');
 const { AuthSchemas, validateRequest } = require('../middleware/inputValidator');
 const {
@@ -157,6 +158,28 @@ router.post('/login', loginLimiter, validateRequest(AuthSchemas.login), async (r
       }
     });
 
+    // Trigger account takeover alerting for new device login
+    try {
+      await accountTakeoverAlertingService.alertNewDeviceLogin(
+        user._id,
+        {
+          deviceName: req.body.deviceName,
+          deviceType: req.body.deviceType || 'unknown',
+          userAgent: req.get('User-Agent'),
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country,
+            coordinates: req.body.location?.coordinates
+          }
+        },
+        session
+      );
+    } catch (alertError) {
+      console.error('Error sending account takeover alert:', alertError);
+      // Don't fail login if alerting fails
+    }
+
     res.json({
       token,
       sessionId: session._id,
@@ -220,6 +243,28 @@ router.post('/verify-2fa', async (req, res) => {
       status: 'success',
       securityContext: { totpUsed: true }
     });
+
+    // Trigger account takeover alerting for new device login
+    try {
+      await accountTakeoverAlertingService.alertNewDeviceLogin(
+        user._id,
+        {
+          deviceName: req.body.deviceName,
+          deviceType: req.body.deviceType || 'unknown',
+          userAgent: req.get('User-Agent'),
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country,
+            coordinates: req.body.location?.coordinates
+          }
+        },
+        session
+      );
+    } catch (alertError) {
+      console.error('Error sending account takeover alert:', alertError);
+      // Don't fail login if alerting fails
+    }
 
     res.json({
       token,
@@ -491,9 +536,29 @@ router.post('/security/change-password', auth, async (req, res) => {
       status: 'success'
     });
 
-    res.json({
-      success: true,
-      message: 'Password changed successfully. Other sessions have been logged out.'
+    // Trigger account takeover alert for password change
+    try {
+      await accountTakeoverAlertingService.alertPasswordChange(
+        req.user._id,
+        {
+          ipAddress: req.ip,
+          location: {
+            city: req.body.location?.city,
+            country: req.body.location?.country
+          },
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date(),
+          initiatedBy: 'user'
+        }
+      );
+    } catch (alertError) {
+      console.error('Error sending password change alert:', alertError);
+      // Don't fail password change if alerting fails
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Password changed successfully. Other sessions have been logged out.' 
     });
   } catch (error) {
     console.error('Change password error:', error);
