@@ -376,6 +376,200 @@ router.post('/send-code-email', auth, async (req, res) => {
 });
 
 /**
+ * POST /2fa/email/setup
+ * Setup email as 2FA method
+ */
+router.post('/email/setup', auth, twoFactorLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+
+    const result = await twoFactorAuthService.setupEmailMethod(req.user.id, email);
+
+    res.json({
+      success: result.success,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Error setting up email 2FA:', error);
+    res.status(400).json({ error: error.message || 'Failed to setup email 2FA' });
+  }
+});
+
+/**
+ * POST /2fa/email/verify
+ * Verify email and enable email 2FA
+ */
+router.post('/email/verify', auth, verifyCodeLimiter, async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!code || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: 'Invalid verification code format' });
+    }
+
+    const result = await twoFactorAuthService.verifyAndEnableEmail(req.user.id, code);
+
+    // Log the action
+    await AuditLog.create({
+      userId: req.user.id,
+      action: '2FA_SETUP_COMPLETED',
+      actionType: 'security',
+      resourceType: 'TwoFactorAuth',
+      details: {
+        method: 'email'
+      }
+    });
+
+    res.json({
+      success: true,
+      backupCodes: result.backupCodes,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Error verifying email 2FA setup:', error);
+    res.status(400).json({ error: error.message || 'Failed to verify email code' });
+  }
+});
+
+/**
+ * POST /2fa/email/verify-login
+ * Verify email code during login
+ */
+router.post('/email/verify-login', auth, verifyCodeLimiter, async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!code || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: 'Invalid code format' });
+    }
+
+    const result = await twoFactorAuthService.verifyEmailCode(req.user.id, code);
+
+    // Log successful verification
+    await AuditLog.create({
+      userId: req.user.id,
+      action: '2FA_VERIFIED',
+      actionType: 'security',
+      resourceType: 'TwoFactorAuth',
+      details: {
+        method: 'email'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Email verification successful'
+    });
+  } catch (error) {
+    console.error('Error verifying email code:', error);
+    res.status(400).json({ error: error.message || 'Failed to verify email code' });
+  }
+});
+
+/**
+ * POST /2fa/sms/send-code
+ * Send SMS code for 2FA setup
+ */
+router.post('/sms/send-code', auth, twoFactorLimiter, async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    const result = await twoFactorAuthService.sendSMSCode(req.user.id, phoneNumber);
+
+    res.json({
+      success: result.success,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Error sending SMS code:', error);
+    res.status(400).json({ error: error.message || 'Failed to send SMS code' });
+  }
+});
+
+/**
+ * POST /2fa/sms/verify
+ * Verify SMS code and enable SMS 2FA
+ */
+router.post('/sms/verify', auth, verifyCodeLimiter, async (req, res) => {
+  try {
+    const { phoneNumber, code } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    if (!code || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: 'Invalid SMS code format' });
+    }
+
+    const result = await twoFactorAuthService.verifyAndEnableSMS(req.user.id, phoneNumber, code);
+
+    // Log the action
+    await AuditLog.create({
+      userId: req.user.id,
+      action: '2FA_SETUP_COMPLETED',
+      actionType: 'security',
+      resourceType: 'TwoFactorAuth',
+      details: {
+        method: 'sms'
+      }
+    });
+
+    res.json({
+      success: true,
+      backupCodes: result.backupCodes,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Error verifying SMS setup:', error);
+    res.status(400).json({ error: error.message || 'Failed to verify SMS code' });
+  }
+});
+
+/**
+ * POST /2fa/sms/verify-login
+ * Verify SMS code during login
+ */
+router.post('/sms/verify-login', auth, verifyCodeLimiter, async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!code || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: 'Invalid code format' });
+    }
+
+    const result = await twoFactorAuthService.verifySMSCode(req.user.id, code);
+
+    // Log successful verification
+    await AuditLog.create({
+      userId: req.user.id,
+      action: '2FA_VERIFIED',
+      actionType: 'security',
+      resourceType: 'TwoFactorAuth',
+      details: {
+        method: 'sms'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'SMS verification successful'
+    });
+  } catch (error) {
+    console.error('Error verifying SMS code:', error);
+    res.status(400).json({ error: error.message || 'Failed to verify SMS code' });
+  }
+});
+
+/**
  * GET /2fa/audit-log
  * Get 2FA audit log
  */
