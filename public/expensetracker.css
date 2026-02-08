@@ -9489,3 +9489,145 @@ input:checked + .toggle-slider::before {
 
 .chart-container { padding: 25px; }
 .chart-container h3 { margin-bottom: 20px; font-size: 1rem; color: var(--text-secondary); }
+
+/* ============================================
+   TAX COMPLIANCE & FORENSIC AUDIT
+   Issue #573: Global Compliance Module
+   ============================================ */
+
+.compliance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.radial-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.circular-chart {
+    display: block;
+    margin: 10px auto;
+    max-width: 120px;
+}
+
+.circle { fill: none; stroke: #64ffda; stroke-width: 2.8; stroke-linecap: round; transition: stroke-dasharray 1s ease; }
+.circle-bg { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 2.8; }
+.percentage { fill: #fff; font-family: sans-serif; font-size: 0.5em; text-anchor: middle; font-weight: 700; }
+
+.compliance-grid {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 25px;
+}
+
+.section-card {
+    padding: 20px;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.card-header h3 { font-size: 1rem; color: var(--text-secondary); margin: 0; }
+.card-header h3 i { margin-right: 10px; color: var(--accent-primary); }
+
+.packs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pack-item {
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pack-meta strong { display: block; font-size: 0.9rem; }
+.pack-meta span { font-size: 0.75rem; color: var(--text-secondary); }
+
+.badgered {
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.juris-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.juris-item:last-child { border: none; }
+.juris-meta strong { display: block; font-size: 0.85rem; }
+.juris-meta small { color: var(--text-secondary); font-size: 0.75rem; }
+
+.forensic-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.filter-chip {
+    padding: 5px 15px;
+    border-radius: 15px;
+    background: rgba(255,255,255,0.05);
+    font-size: 0.75rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.filter-chip.active {
+    background: rgba(100, 255, 218, 0.1);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.empty-findings {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.empty-findings i { font-size: 4rem; margin-bottom: 20px; }
+
+/* Multi-step Logic Styles */
+.audit-options {
+    margin: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.checkbox-container input { width: 16px; height: 16px; }
