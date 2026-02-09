@@ -279,6 +279,8 @@ app.use('/api/expenses', expenseRoutes); // Expense management
 app.use('/api/currency', require('./routes/currency'));
 app.use('/api/payroll', require('./routes/payroll'));
 app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/fx-revaluation', require('./routes/fx-revaluation'));
+app.use('/api/budget-analytics', require('./routes/budget-analytics'));
 app.use('/api/splits', require('./routes/splits'));
 app.use('/api/workspaces', require('./routes/workspaces'));
 app.use('/api/tax', require('./routes/tax'));
