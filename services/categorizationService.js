@@ -1,17 +1,11 @@
-let brain;
-try {
-  brain = require('brain.js');
-} catch (error) {
-  console.log('Brain.js not available, using enhanced rule-based categorization');
-  brain = null;
-}
-
+const tf = require('@tensorflow/tfjs');
 const CategoryPattern = require('../models/CategoryPattern');
 const CategoryTraining = require('../models/CategoryTraining');
+const CategoryModel = require('../models/CategoryModel');
 
 class CategorizationService {
   constructor() {
-    this.networks = new Map(); // Store trained networks per user
+    this.models = new Map(); // Store trained TensorFlow models per user
     this.categories = ['food', 'transport', 'entertainment', 'utilities', 'healthcare', 'shopping', 'other'];
     this.categoryMap = {
       0: 'food',
@@ -22,7 +16,6 @@ class CategorizationService {
       5: 'shopping',
       6: 'other'
     };
-    this.brainAvailable = brain !== null;
   }
 
   // Legacy method for backward compatibility
@@ -79,9 +72,11 @@ class CategorizationService {
     return features;
   }
 
-  // Train ML model for a user
+  // Train TensorFlow ML model for a user
   async trainModel(userId) {
     try {
+      const startTime = Date.now();
+
       // Get training data
       const trainingData = await CategoryTraining.getTrainingData(userId, 5000);
 
@@ -90,53 +85,116 @@ class CategorizationService {
         return false;
       }
 
-      // Prepare training set
-      const trainingSet = trainingData.map(item => {
-        const input = this.textToFeatures(item.description, item.amount);
+      console.log(`Training TensorFlow model for user ${userId} with ${trainingData.length} samples`);
+
+      // Prepare training data
+      const inputs = [];
+      const labels = [];
+
+      trainingData.forEach(item => {
+        const features = this.textToFeatures(item.description, item.amount);
+        inputs.push(features);
+
         const output = new Array(7).fill(0);
         const categoryIndex = this.categories.indexOf(item.category);
         if (categoryIndex >= 0) {
           output[categoryIndex] = 1;
         }
-        return { input, output };
+        labels.push(output);
       });
 
-      // Create and train network
-      const net = new brain.NeuralNetwork({
-        hiddenLayers: [20, 10],
-        activation: 'sigmoid'
+      // Convert to tensors
+      const xs = tf.tensor2d(inputs);
+      const ys = tf.tensor2d(labels);
+
+      // Create model
+      const model = tf.sequential();
+      model.add(tf.layers.dense({ inputShape: [50], units: 64, activation: 'relu' }));
+      model.add(tf.layers.dropout({ rate: 0.2 }));
+      model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+      model.add(tf.layers.dropout({ rate: 0.2 }));
+      model.add(tf.layers.dense({ units: 7, activation: 'softmax' }));
+
+      // Compile model
+      model.compile({
+        optimizer: tf.train.adam(0.001),
+        loss: 'categoricalCrossentropy',
+        metrics: ['accuracy']
       });
 
-      console.log(`Training ML model for user ${userId} with ${trainingSet.length} samples`);
-      net.train(trainingSet, {
-        iterations: 2000,
-        errorThresh: 0.005,
-        log: false
+      // Train model
+      const history = await model.fit(xs, ys, {
+        epochs: 50,
+        batchSize: 32,
+        validationSplit: 0.2,
+        callbacks: {
+          onEpochEnd: (epoch, logs) => {
+            if (epoch % 10 === 0) {
+              console.log(`Epoch ${epoch}: loss = ${logs.loss.toFixed(4)}, accuracy = ${logs.acc.toFixed(4)}`);
+            }
+          }
+        }
       });
 
-      // Store trained network
-      this.networks.set(userId.toString(), net);
+      // Calculate accuracy
+      const finalAccuracy = history.history.acc[history.history.acc.length - 1];
 
-      console.log(`ML model trained successfully for user ${userId}`);
+      // Save model to database
+      const modelData = await model.save(tf.io.withSaveHandler(async (artifacts) => {
+        return Buffer.from(JSON.stringify(artifacts));
+      }));
+
+      await CategoryModel.saveModel(userId, modelData, {
+        layers: 3,
+        inputSize: 50,
+        outputSize: 7,
+        trainingTime: Date.now() - startTime,
+        epochs: 50,
+        accuracy: finalAccuracy
+      });
+
+      // Store in memory for quick access
+      this.models.set(userId.toString(), model);
+
+      // Clean up tensors
+      xs.dispose();
+      ys.dispose();
+
+      console.log(`TensorFlow model trained successfully for user ${userId} with ${finalAccuracy.toFixed(4)} accuracy`);
       return true;
     } catch (error) {
-      console.error('Error training ML model:', error);
+      console.error('Error training TensorFlow model:', error);
       return false;
     }
   }
 
-  // Predict category using ML model
+  // Predict category using TensorFlow ML model
   async predictCategory(userId, description, amount = 0) {
     const userKey = userId.toString();
 
-    // Check if we have a trained model
-    if (!this.networks.has(userKey)) {
-      // Try to load or train model
-      await this.trainModel(userId);
+    // Check if we have a trained model in memory
+    if (!this.models.has(userKey)) {
+      // Try to load from database first
+      const savedModel = await CategoryModel.getActiveModel(userId);
+      if (savedModel) {
+        try {
+          // Load model from saved data
+          const modelArtifacts = JSON.parse(savedModel.modelData.toString());
+          const model = await tf.loadLayersModel(tf.io.fromMemory(modelArtifacts));
+          this.models.set(userKey, model);
+        } catch (error) {
+          console.error('Error loading saved model:', error);
+          // Fall back to training new model
+          await this.trainModel(userId);
+        }
+      } else {
+        // Train new model
+        await this.trainModel(userId);
+      }
     }
 
-    const net = this.networks.get(userKey);
-    if (!net) {
+    const model = this.models.get(userKey);
+    if (!model) {
       // Fallback to rule-based categorization
       return {
         category: this.categorize(description),
@@ -146,27 +204,33 @@ class CategorizationService {
     }
 
     try {
-      const input = this.textToFeatures(description, amount);
-      const output = net.run(input);
+      const inputFeatures = this.textToFeatures(description, amount);
+      const inputTensor = tf.tensor2d([inputFeatures]);
+      const prediction = model.predict(inputTensor);
+      const probabilities = await prediction.data();
 
       // Find the category with highest probability
       let maxProb = 0;
       let predictedIndex = 6; // default to 'other'
 
-      output.forEach((prob, index) => {
+      probabilities.forEach((prob, index) => {
         if (prob > maxProb) {
           maxProb = prob;
           predictedIndex = index;
         }
       });
 
+      // Clean up tensors
+      inputTensor.dispose();
+      prediction.dispose();
+
       return {
         category: this.categoryMap[predictedIndex],
         confidence: maxProb,
-        method: 'ml'
+        method: 'tensorflow'
       };
     } catch (error) {
-      console.error('Error predicting category:', error);
+      console.error('Error predicting category with TensorFlow:', error);
       return {
         category: this.categorize(description),
         confidence: 0.5,
