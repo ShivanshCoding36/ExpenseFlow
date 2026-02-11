@@ -9,11 +9,35 @@ class RuleEngine {
      */
     async processTransaction(expenseData, userId) {
         try {
-            const activeRules = await Rule.find({ user: userId, isActive: true });
+            const workspaceId = expenseData.workspace;
+
+            // Fetch hierarchical rules: Global rules + Workspace rules
+            // Prioritize Workspace rules over Global rules if they target the same logic
+            let query = { user: userId, isActive: true };
+            if (workspaceId) {
+                query.$or = [
+                    { workspace: workspaceId },
+                    { workspace: null, isGlobal: true }
+                ];
+            } else {
+                query.workspace = null;
+            }
+
+            const activeRules = await Rule.find(query).sort({ workspace: -1, createdAt: -1 });
+
+            // Filter out global rules that are overridden by workspace-specific rules
+            const overriddenRuleIds = activeRules
+                .filter(r => r.overridesRule)
+                .map(r => r.overridesRule.toString());
+
+            const effectiveRules = activeRules.filter(r =>
+                !overriddenRuleIds.includes(r._id.toString())
+            );
+
             let modifiedData = { ...expenseData };
             let appliedRules = [];
 
-            for (const rule of activeRules) {
+            for (const rule of effectiveRules) {
                 if (this.evaluateTrigger(rule.trigger, modifiedData)) {
                     modifiedData = this.applyActions(rule.actions, modifiedData);
                     appliedRules.push(rule._id);

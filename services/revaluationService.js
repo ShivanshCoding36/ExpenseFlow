@@ -250,14 +250,14 @@ class RevaluationService {
         for (const account of accounts) {
             try {
                 const currentRateData = await forexService.getRealTimeRate(account.currency, baseCurrency);
-                
+
                 // For acquisition rate, we now look at historical transaction metadata if available
                 // Otherwise fallback to opening balance approximation
                 let acquisitionRate = account.openingBalance > 0 ? (account.balance / account.openingBalance) : currentRateData.rate;
-                
+
                 // Advanced: Try to find the weighted average rate from revaluationHistory of recent transactions
-                const recentTx = await Transaction.find({ 
-                    user: userId, 
+                const recentTx = await Transaction.find({
+                    user: userId,
                     originalCurrency: account.currency,
                     'forexMetadata.isHistoricallyAccurate': true
                 }).sort({ date: -1 }).limit(20);
@@ -303,7 +303,7 @@ class RevaluationService {
         const exposures = await this._getExposureData(userId, baseCurrency);
 
         const riskScore = this._calculateRiskScore(exposures, pl);
-        
+
         return {
             userId,
             baseCurrency,
@@ -316,6 +316,54 @@ class RevaluationService {
         };
     }
 
+    /**
+     * Generate consolidated currency exposure report for a workspace hierarchy (#629)
+     */
+    async generateConsolidatedExposureReport(workspaceId, baseCurrency = 'USD') {
+        const consolidationService = require('./consolidationService');
+        const hierarchy = await consolidationService.getWorkspaceHierarchy(workspaceId);
+        const allWorkspaceIds = consolidationService._flattenHierarchy(hierarchy);
+
+        // Find all accounts belonging to these workspaces
+        const accounts = await Account.find({ workspace: { $in: allWorkspaceIds }, isActive: true });
+
+        const exposureMap = new Map();
+        let totalValue = 0;
+
+        for (const account of accounts) {
+            const rate = account.currency === baseCurrency ? 1 : (await forexService.getRealTimeRate(account.currency, baseCurrency)).rate;
+            const value = account.balance * rate;
+
+            if (!exposureMap.has(account.currency)) {
+                exposureMap.set(account.currency, {
+                    currency: account.currency,
+                    value: 0,
+                    entities: new Set()
+                });
+            }
+
+            const exp = exposureMap.get(account.currency);
+            exp.value += value;
+            exp.entities.add(account.workspace.toString());
+            totalValue += value;
+        }
+
+        const consolidatedExposures = Array.from(exposureMap.values()).map(e => ({
+            currency: e.currency,
+            totalValue: CurrencyMath.round(e.value),
+            entityCount: e.entities.size,
+            percentage: totalValue > 0 ? (e.value / totalValue) * 100 : 0
+        })).sort((a, b) => b.totalValue - a.totalValue);
+
+        return {
+            rootWorkspaceId: workspaceId,
+            baseCurrency,
+            totalValue: CurrencyMath.round(totalValue),
+            exposures: consolidatedExposures,
+            timestamp: new Date()
+        };
+    }
+
     async _getExposureData(userId, baseCurrency) {
         const accounts = await Account.find({ userId, isActive: true });
         const exposureMap = new Map();
@@ -324,11 +372,11 @@ class RevaluationService {
         for (const account of accounts) {
             const rate = account.currency === baseCurrency ? 1 : (await forexService.getRealTimeRate(account.currency, baseCurrency)).rate;
             const value = account.balance * rate;
-            
+
             if (!exposureMap.has(account.currency)) {
                 exposureMap.set(account.currency, { currency: account.currency, value: 0, accounts: [] });
             }
-            
+
             const exp = exposureMap.get(account.currency);
             exp.value += value;
             exp.accounts.push({ id: account._id, name: account.name });

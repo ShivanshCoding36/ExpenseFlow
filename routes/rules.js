@@ -10,10 +10,47 @@ const protect = require('../middleware/authMiddleware');
  */
 router.get('/', protect, async (req, res) => {
     try {
-        const rules = await Rule.find({ user: req.user.id });
+        const { workspaceId } = req.query;
+        const query = { user: req.user.id };
+
+        if (workspaceId) {
+            // Fetch global rules AND workspace specific rules
+            query.$or = [
+                { workspace: workspaceId },
+                { workspace: null, isGlobal: true }
+            ];
+        } else {
+            query.workspace = null;
+        }
+
+        const rules = await Rule.find(query).sort({ workspace: -1, createdAt: -1 });
         res.json(rules);
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * @route   POST /api/rules/workspace/:workspaceId/override/:globalRuleId
+ * @desc    Create a workspace-level override for a global rule
+ */
+router.post('/workspace/:workspaceId/override/:globalRuleId', protect, async (req, res) => {
+    try {
+        const globalRule = await Rule.findOne({ _id: req.params.globalRuleId, user: req.user.id, workspace: null });
+        if (!globalRule) return res.status(404).json({ error: 'Global rule not found' });
+
+        const overrideRule = new Rule({
+            ...req.body,
+            user: req.user.id,
+            workspace: req.params.workspaceId,
+            overridesRule: globalRule._id,
+            isGlobal: false
+        });
+
+        const savedRule = await overrideRule.save();
+        res.status(201).json(savedRule);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
 });
 

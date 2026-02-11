@@ -6,6 +6,20 @@ const ruleSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    workspace: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Workspace',
+        default: null // null means global for the user
+    },
+    isGlobal: {
+        type: Boolean,
+        default: function () { return !this.workspace; }
+    },
+    overridesRule: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Rule',
+        default: null // If this is a workspace-level override of a global rule
+    },
     name: {
         type: String,
         required: true,

@@ -69,19 +69,19 @@ const ROLE_HIERARCHY = {
 };
 
 const memberSchema = new mongoose.Schema({
-  user: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true 
+    required: true
   },
-  role: { 
-    type: String, 
-    enum: ['owner', 'manager', 'editor', 'viewer'], 
-    default: 'viewer' 
+  role: {
+    type: String,
+    enum: ['owner', 'manager', 'editor', 'viewer'],
+    default: 'viewer'
   },
   permissions: {
     type: [String],
-    default: function() {
+    default: function () {
       return ROLE_PERMISSIONS[this.role] || ROLE_PERMISSIONS.viewer;
     }
   },
@@ -99,11 +99,11 @@ const memberSchema = new mongoose.Schema({
 }, { _id: true });
 
 // Calculate effective permissions
-memberSchema.virtual('effectivePermissions').get(function() {
+memberSchema.virtual('effectivePermissions').get(function () {
   const basePermissions = ROLE_PERMISSIONS[this.role] || [];
   const custom = this.customPermissions || [];
   const restricted = this.restrictedPermissions || [];
-  
+
   return [...new Set([...basePermissions, ...custom])]
     .filter(p => !restricted.includes(p));
 });
@@ -141,6 +141,35 @@ const workspaceSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: String,
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+
+  // Hierarchy fields (#629)
+  parentWorkspace: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workspace',
+    default: null
+  },
+  type: {
+    type: String,
+    enum: ['company', 'department', 'team', 'project', 'sandbox'],
+    default: 'company'
+  },
+
+  // Entity metadata for high-complexity organizational mapping
+  entityMetadata: {
+    legalName: String,
+    taxId: String,
+    registrationDate: Date,
+    hqAddress: String,
+    consolidatedBaseCurrency: { type: String, default: 'USD' }
+  },
+
+  inheritanceSettings: {
+    inheritMembers: { type: Boolean, default: true },
+    inheritRules: { type: Boolean, default: true },
+    inheritCategories: { type: Boolean, default: true },
+    allowOverrides: { type: Boolean, default: true }
+  },
+
   members: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     role: { type: String, enum: ['admin', 'manager', 'member'], default: 'member' },
@@ -189,7 +218,7 @@ const workspaceSchema = new mongoose.Schema({
     enum: ['active', 'archived', 'suspended'],
     default: 'active'
   },
-  
+
   // Usage stats
   stats: {
     totalExpenses: { type: Number, default: 0 },
@@ -201,10 +230,10 @@ const workspaceSchema = new mongoose.Schema({
   activeUsers: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     socketId: String,
-    status: { 
-      type: String, 
-      enum: ['online', 'busy', 'viewing', 'away'], 
-      default: 'online' 
+    status: {
+      type: String,
+      enum: ['online', 'busy', 'viewing', 'away'],
+      default: 'online'
     },
     currentView: String, // Current page/expense they're viewing
     lastSeen: { type: Date, default: Date.now },
@@ -217,10 +246,10 @@ const workspaceSchema = new mongoose.Schema({
 
   // Distributed locks for conflict prevention
   locks: [{
-    resourceType: { 
-      type: String, 
-      enum: ['expense', 'budget', 'workspace'], 
-      required: true 
+    resourceType: {
+      type: String,
+      enum: ['expense', 'budget', 'workspace'],
+      required: true
     },
     resourceId: { type: String, required: true },
     lockedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -273,7 +302,7 @@ const workspaceSchema = new mongoose.Schema({
     notifyOnMention: { type: Boolean, default: true },
     notifyOnLock: { type: Boolean, default: true }
   }
-}, { 
+}, {
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
@@ -287,79 +316,79 @@ workspaceSchema.index({ status: 1 });
 workspaceSchema.index({ 'inviteSettings.inviteLinkToken': 1 });
 
 // Virtual for member count
-workspaceSchema.virtual('memberCount').get(function() {
+workspaceSchema.virtual('memberCount').get(function () {
   return this.members.length;
 });
 
 // Generate slug from name
-workspaceSchema.pre('save', function(next) {
+workspaceSchema.pre('save', function (next) {
   if (this.isNew || this.isModified('name')) {
     this.slug = this.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') + 
+      .replace(/(^-|-$)/g, '') +
       '-' + Date.now().toString(36);
   }
   next();
 });
 
 // Instance method: Check if user has permission
-workspaceSchema.methods.hasPermission = function(userId, permission) {
+workspaceSchema.methods.hasPermission = function (userId, permission) {
   const member = this.members.find(m => m.user.toString() === userId.toString());
   if (!member) return false;
   if (member.status !== 'active') return false;
-  
+
   // Owner has all permissions
   if (this.owner.toString() === userId.toString()) return true;
-  
-  const effectivePerms = member.effectivePermissions || 
+
+  const effectivePerms = member.effectivePermissions ||
     ROLE_PERMISSIONS[member.role] || [];
   return effectivePerms.includes(permission);
 };
 
 // Instance method: Get member by user ID
-workspaceSchema.methods.getMember = function(userId) {
+workspaceSchema.methods.getMember = function (userId) {
   return this.members.find(m => m.user.toString() === userId.toString());
 };
 
 // Instance method: Get user's role
-workspaceSchema.methods.getUserRole = function(userId) {
+workspaceSchema.methods.getUserRole = function (userId) {
   if (this.owner.toString() === userId.toString()) return 'owner';
   const member = this.getMember(userId);
   return member ? member.role : null;
 };
 
 // Instance method: Check if user can manage target role
-workspaceSchema.methods.canManageRole = function(userId, targetRole) {
+workspaceSchema.methods.canManageRole = function (userId, targetRole) {
   const userRole = this.getUserRole(userId);
   if (!userRole) return false;
-  
+
   const userLevel = ROLE_HIERARCHY[userRole] || 0;
   const targetLevel = ROLE_HIERARCHY[targetRole] || 0;
-  
+
   // Can only manage roles below your level
   return userLevel > targetLevel;
 };
 
 // Instance method: Add activity log
-workspaceSchema.methods.logActivity = function(action, performedBy, details = {}) {
+workspaceSchema.methods.logActivity = function (action, performedBy, details = {}) {
   this.activityLog.push({
     action,
     performedBy,
     ...details,
     timestamp: new Date()
   });
-  
+
   // Keep only last 1000 entries
   if (this.activityLog.length > 1000) {
     this.activityLog = this.activityLog.slice(-1000);
   }
-  
+
   this.stats.lastActivityAt = new Date();
 };
 
 // Static method: Get user's workspaces
-workspaceSchema.statics.getUserWorkspaces = function(userId) {
+workspaceSchema.statics.getUserWorkspaces = function (userId) {
   return this.find({
     $or: [
       { owner: userId },
@@ -367,20 +396,20 @@ workspaceSchema.statics.getUserWorkspaces = function(userId) {
     ],
     status: 'active'
   })
-  .populate('owner', 'name email avatar')
-  .populate('members.user', 'name email avatar')
-  .sort({ updatedAt: -1 });
+    .populate('owner', 'name email avatar')
+    .populate('members.user', 'name email avatar')
+    .sort({ updatedAt: -1 });
 };
 
 // Static method: Check permission (for middleware)
-workspaceSchema.statics.checkPermission = async function(workspaceId, userId, permission) {
+workspaceSchema.statics.checkPermission = async function (workspaceId, userId, permission) {
   const workspace = await this.findById(workspaceId);
   if (!workspace) return { allowed: false, reason: 'Workspace not found' };
   if (workspace.status !== 'active') return { allowed: false, reason: 'Workspace is not active' };
-  
+
   const allowed = workspace.hasPermission(userId, permission);
-  return { 
-    allowed, 
+  return {
+    allowed,
     reason: allowed ? null : 'Permission denied',
     workspace,
     role: workspace.getUserRole(userId)
@@ -388,12 +417,12 @@ workspaceSchema.statics.checkPermission = async function(workspaceId, userId, pe
 };
 
 // Instance method: Add user to active users (#471)
-workspaceSchema.methods.addActiveUser = function(userId, socketId, device = {}) {
+workspaceSchema.methods.addActiveUser = function (userId, socketId, device = {}) {
   // Remove existing entry for this user
   this.activeUsers = this.activeUsers.filter(
     u => u.user.toString() !== userId.toString()
   );
-  
+
   this.activeUsers.push({
     user: userId,
     socketId,
@@ -401,12 +430,12 @@ workspaceSchema.methods.addActiveUser = function(userId, socketId, device = {}) 
     lastSeen: new Date(),
     device
   });
-  
+
   return this.save();
 };
 
 // Instance method: Remove user from active users
-workspaceSchema.methods.removeActiveUser = function(userId) {
+workspaceSchema.methods.removeActiveUser = function (userId) {
   this.activeUsers = this.activeUsers.filter(
     u => u.user.toString() !== userId.toString()
   );
@@ -414,11 +443,11 @@ workspaceSchema.methods.removeActiveUser = function(userId) {
 };
 
 // Instance method: Update user status
-workspaceSchema.methods.updateUserStatus = function(userId, status, currentView = null) {
+workspaceSchema.methods.updateUserStatus = function (userId, status, currentView = null) {
   const activeUser = this.activeUsers.find(
     u => u.user.toString() === userId.toString()
   );
-  
+
   if (activeUser) {
     activeUser.status = status;
     activeUser.lastSeen = new Date();
@@ -426,33 +455,33 @@ workspaceSchema.methods.updateUserStatus = function(userId, status, currentView 
       activeUser.currentView = currentView;
     }
   }
-  
+
   return this.save();
 };
 
 // Instance method: Acquire lock
-workspaceSchema.methods.acquireLock = async function(resourceType, resourceId, userId, socketId, lockDuration = 300) {
+workspaceSchema.methods.acquireLock = async function (resourceType, resourceId, userId, socketId, lockDuration = 300) {
   // Check if already locked by another user
   const existingLock = this.locks.find(
-    lock => lock.resourceType === resourceType && 
-            lock.resourceId === resourceId &&
-            lock.expiresAt > new Date()
+    lock => lock.resourceType === resourceType &&
+      lock.resourceId === resourceId &&
+      lock.expiresAt > new Date()
   );
-  
+
   if (existingLock && existingLock.lockedBy.toString() !== userId.toString()) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       lockedBy: existingLock.lockedBy,
-      expiresAt: existingLock.expiresAt 
+      expiresAt: existingLock.expiresAt
     };
   }
-  
+
   // Remove expired or existing locks for this resource
   this.locks = this.locks.filter(
     lock => !(lock.resourceType === resourceType && lock.resourceId === resourceId) &&
-            lock.expiresAt > new Date()
+      lock.expiresAt > new Date()
   );
-  
+
   // Add new lock
   const expiresAt = new Date(Date.now() + lockDuration * 1000);
   this.locks.push({
@@ -463,60 +492,60 @@ workspaceSchema.methods.acquireLock = async function(resourceType, resourceId, u
     expiresAt,
     socketId
   });
-  
+
   await this.save();
   return { success: true, expiresAt };
 };
 
 // Instance method: Release lock
-workspaceSchema.methods.releaseLock = async function(resourceType, resourceId, userId) {
+workspaceSchema.methods.releaseLock = async function (resourceType, resourceId, userId) {
   this.locks = this.locks.filter(
-    lock => !(lock.resourceType === resourceType && 
-              lock.resourceId === resourceId &&
-              lock.lockedBy.toString() === userId.toString())
+    lock => !(lock.resourceType === resourceType &&
+      lock.resourceId === resourceId &&
+      lock.lockedBy.toString() === userId.toString())
   );
-  
+
   return await this.save();
 };
 
 // Instance method: Check if resource is locked
-workspaceSchema.methods.isLocked = function(resourceType, resourceId, userId = null) {
+workspaceSchema.methods.isLocked = function (resourceType, resourceId, userId = null) {
   const lock = this.locks.find(
-    lock => lock.resourceType === resourceType && 
-            lock.resourceId === resourceId &&
-            lock.expiresAt > new Date()
+    lock => lock.resourceType === resourceType &&
+      lock.resourceId === resourceId &&
+      lock.expiresAt > new Date()
   );
-  
+
   if (!lock) return { locked: false };
-  
+
   // If userId provided, check if it's locked by someone else
   if (userId && lock.lockedBy.toString() === userId.toString()) {
     return { locked: false, ownLock: true };
   }
-  
-  return { 
-    locked: true, 
+
+  return {
+    locked: true,
     lockedBy: lock.lockedBy,
-    expiresAt: lock.expiresAt 
+    expiresAt: lock.expiresAt
   };
 };
 
 // Instance method: Clean expired locks
-workspaceSchema.methods.cleanExpiredLocks = function() {
+workspaceSchema.methods.cleanExpiredLocks = function () {
   const before = this.locks.length;
   this.locks = this.locks.filter(lock => lock.expiresAt > new Date());
   return before - this.locks.length; // Return number of locks removed
 };
 
 // Instance method: Add typing indicator
-workspaceSchema.methods.setTyping = function(userId, resourceType, resourceId, duration = 10) {
+workspaceSchema.methods.setTyping = function (userId, resourceType, resourceId, duration = 10) {
   // Remove existing typing indicator for this user/resource
   this.typingUsers = this.typingUsers.filter(
-    t => !(t.user.toString() === userId.toString() && 
-           t.resourceType === resourceType && 
-           t.resourceId === resourceId)
+    t => !(t.user.toString() === userId.toString() &&
+      t.resourceType === resourceType &&
+      t.resourceId === resourceId)
   );
-  
+
   const expiresAt = new Date(Date.now() + duration * 1000);
   this.typingUsers.push({
     user: userId,
@@ -525,33 +554,33 @@ workspaceSchema.methods.setTyping = function(userId, resourceType, resourceId, d
     startedAt: new Date(),
     expiresAt
   });
-  
+
   return this.save();
 };
 
 // Instance method: Remove typing indicator
-workspaceSchema.methods.clearTyping = function(userId, resourceType, resourceId) {
+workspaceSchema.methods.clearTyping = function (userId, resourceType, resourceId) {
   this.typingUsers = this.typingUsers.filter(
-    t => !(t.user.toString() === userId.toString() && 
-           t.resourceType === resourceType && 
-           t.resourceId === resourceId)
+    t => !(t.user.toString() === userId.toString() &&
+      t.resourceType === resourceType &&
+      t.resourceId === resourceId)
   );
-  
+
   return this.save();
 };
 
 // Instance method: Get active typing users for resource
-workspaceSchema.methods.getTypingUsers = function(resourceType, resourceId) {
+workspaceSchema.methods.getTypingUsers = function (resourceType, resourceId) {
   // Clean expired indicators
   this.typingUsers = this.typingUsers.filter(t => t.expiresAt > new Date());
-  
+
   return this.typingUsers.filter(
     t => t.resourceType === resourceType && t.resourceId === resourceId
   );
 };
 
 // Instance method: Create discussion
-workspaceSchema.methods.createDiscussion = function(parentType, parentId, title, userId, initialMessage) {
+workspaceSchema.methods.createDiscussion = function (parentType, parentId, title, userId, initialMessage) {
   const discussion = {
     parentType,
     parentId,
@@ -561,7 +590,7 @@ workspaceSchema.methods.createDiscussion = function(parentType, parentId, title,
     createdAt: new Date(),
     lastMessageAt: new Date()
   };
-  
+
   if (initialMessage) {
     discussion.messages.push({
       user: userId,
@@ -569,23 +598,23 @@ workspaceSchema.methods.createDiscussion = function(parentType, parentId, title,
       timestamp: new Date()
     });
   }
-  
+
   this.discussions.push(discussion);
   return this.save();
 };
 
 // Instance method: Add message to discussion
-workspaceSchema.methods.addMessage = function(discussionId, userId, text, mentions = []) {
+workspaceSchema.methods.addMessage = function (discussionId, userId, text, mentions = []) {
   const discussion = this.discussions.id(discussionId);
   if (!discussion) return null;
-  
+
   discussion.messages.push({
     user: userId,
     text,
     timestamp: new Date(),
     mentions
   });
-  
+
   discussion.lastMessageAt = new Date();
   return this.save();
 };
