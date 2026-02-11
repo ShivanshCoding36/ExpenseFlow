@@ -43,8 +43,8 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: [process.env.FRONTEND_URL ||
-     "http://localhost:3000",
-     'https://accounts.clerk.dev',
+      "http://localhost:3000",
+      'https://accounts.clerk.dev',
       'https://*.clerk.accounts.dev'
     ],
     methods: ["GET", "POST"],
@@ -63,10 +63,10 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: [
-        "'self'", 
-        "'unsafe-inline'", 
-        "https://cdnjs.cloudflare.com", 
-        "https://fonts.googleapis.com", 
+        "'self'",
+        "'unsafe-inline'",
+        "https://cdnjs.cloudflare.com",
+        "https://fonts.googleapis.com",
         "https://api.github.com"
       ],
       scriptSrc: [
@@ -83,10 +83,10 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"],
       workerSrc: ["'self'", "blob:"],
       imgSrc: [
-        "'self'", 
-        "data:", 
-        "https:", 
-        "https://res.cloudinary.com", 
+        "'self'",
+        "data:",
+        "https:",
+        "https://res.cloudinary.com",
         "https://api.github.com",
         "https://img.clerk.com" // For Clerk user avatars
       ],
@@ -277,7 +277,9 @@ console.log('Collaboration handler initialized');
 app.use('/api/auth', require('./middleware/rateLimiter').authLimiter, authRoutes);
 app.use('/api/expenses', expenseRoutes); // Expense management
 app.use('/api/currency', require('./routes/currency'));
-app.use('/api/groups', require('./routes/groups'));
+app.use('/api/payroll', require('./routes/payroll'));
+app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/audit-trail', require('./routes/audit-trail'));
 app.use('/api/splits', require('./routes/splits'));
 app.use('/api/workspaces', require('./routes/workspaces'));
 app.use('/api/tax', require('./routes/tax'));
@@ -294,6 +296,7 @@ app.use('/api/profile', require('./routes/profile'));
 
 // Serve uploaded avatars
 app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
+app.use('/api/treasury', require('./routes/treasury'));
 
 // Import error handling middleware
 const { errorHandler, notFoundHandler } = require('./middleware/errorMiddleware');
