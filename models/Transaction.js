@@ -123,6 +123,18 @@ const transactionSchema = new mongoose.Schema({
         newConvertedAmount: Number,
         baseCurrency: String,
         reason: String
+    }],
+    status: {
+        type: String,
+        enum: ['pending', 'processing', 'validated', 'archived', 'failed'],
+        default: 'pending'
+    },
+    processingLogs: [{
+        step: String,
+        status: String,
+        timestamp: { type: Date, default: Date.now },
+        message: String,
+        details: mongoose.Schema.Types.Mixed
     }]
 }, {
     timestamps: true
@@ -140,6 +152,13 @@ transactionSchema.pre('save', function (next) {
     }
     next();
 });
+
+// Method to log processing steps
+transactionSchema.methods.logStep = async function (step, status, message, details = {}) {
+    this.processingLogs.push({ step, status, message, details });
+    if (status === 'failed') this.status = 'failed';
+    return this.save();
+};
 
 // Indexes for performance optimization
 transactionSchema.index({ user: 1, date: -1 });

@@ -9,7 +9,33 @@ const budgetIntelligenceService = require('./budgetIntelligenceService');
 const intelligenceService = require('./intelligenceService');
 const mongoose = require('mongoose');
 
+const eventDispatcher = require('./eventDispatcher');
+
 class BudgetService {
+  constructor() {
+    this._initializeEventListeners();
+  }
+
+  _initializeEventListeners() {
+    eventDispatcher.on('transaction:validated', async ({ transaction, userId }) => {
+      try {
+        const amount = transaction.convertedAmount || transaction.amount;
+        // Impact budget & goals only for validated transactions
+        if (transaction.type === 'expense') {
+          await this.checkBudgetAlerts(userId);
+        }
+        await this.updateGoalProgress(
+          userId,
+          transaction.type === 'expense' ? -amount : amount,
+          transaction.category
+        );
+        console.log(`[BudgetService] Updated impact for transaction ${transaction._id}`);
+      } catch (err) {
+        console.error('[BudgetService] Failed to process transaction event:', err);
+      }
+    });
+  }
+
   /**
    * Check budget alerts for a user
    */

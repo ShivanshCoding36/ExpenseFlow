@@ -12,17 +12,7 @@ const revaluationService = require('../services/revaluationService');
 const batchProcessor = require('../services/batchProcessor');
 const router = express.Router();
 
-const transactionSchema = Joi.object({
-    description: Joi.string().trim().max(100).required(),
-    amount: Joi.number().min(0.01).required(),
-    currency: Joi.string().uppercase().optional(),
-    category: Joi.string().valid('food', 'transport', 'entertainment', 'utilities', 'healthcare', 'shopping', 'other', 'salary', 'freelance', 'investment', 'transfer').required(),
-    type: Joi.string().valid('income', 'expense', 'transfer').required(),
-    kind: Joi.string().valid('income', 'expense', 'transfer').optional(),
-    merchant: Joi.string().trim().max(50).optional(),
-    date: Joi.date().optional(),
-    workspaceId: Joi.string().hex().length(24).optional()
-});
+const { validateTransaction } = require('../middleware/transactionValidator');
 
 // GET all transactions for authenticated user with pagination support
 router.get('/', auth, async (req, res) => {
@@ -35,14 +25,21 @@ router.get('/', auth, async (req, res) => {
 
         // Workspace filtering
         const workspaceId = req.query.workspaceId;
-        const query = workspaceId
+        const filter = workspaceId
             ? { workspace: workspaceId }
             : { user: req.user._id, workspace: null };
 
-        // Get total count for pagination info
-        const total = await Transaction.countDocuments(query);
+        // Include status in query if specified, default to validated for reports
+        if (req.query.status) {
+            filter.status = req.query.status;
+        } else if (req.query.includePending !== 'true') {
+            filter.status = 'validated';
+        }
 
-        const transactions = await Transaction.find(query)
+        // Get total count for pagination info
+        const total = await Transaction.countDocuments(filter);
+
+        const transactions = await Transaction.find(filter)
             .sort({ date: -1 })
             .skip(skip)
             .limit(limit);
@@ -89,30 +86,36 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
-// POST new transaction for authenticated user
-router.post('/', auth, async (req, res) => {
+// POST new transaction for authenticated user (Multi-Stage Pipeline #628)
+router.post('/', auth, validateTransaction, async (req, res) => {
     try {
-        const { error, value } = transactionSchema.validate(req.body);
-        if (error) return res.status(400).json({ error: error.details[0].message });
-
         const transactionService = require('../services/transactionService');
         const io = req.app.get('io');
 
-        const transaction = await transactionService.createTransaction(value, req.user._id, io);
+        const transaction = await transactionService.createTransaction(req.body, req.user._id, io);
 
-        // Add display fields for backward compatibility with UI
-        const user = await User.findById(req.user._id);
-        const response = transaction.toObject();
+        res.status(202).json({
+            success: true,
+            message: 'Transaction accepted and processing started',
+            transactionId: transaction._id,
+            status: transaction.status
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
-        if (response.originalCurrency !== user.preferredCurrency && response.convertedAmount) {
-            response.displayAmount = response.convertedAmount;
-            response.displayCurrency = user.preferredCurrency;
-        } else {
-            response.displayAmount = response.amount;
-            response.displayCurrency = response.originalCurrency;
-        }
+// Get detailed processing history for a transaction
+router.get('/:id/processing-logs', auth, async (req, res) => {
+    try {
+        const transaction = await Transaction.findOne({ _id: req.params.id, user: req.user._id });
+        if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-        res.status(201).json(response);
+        res.json({
+            success: true,
+            status: transaction.status,
+            logs: transaction.processingLogs
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

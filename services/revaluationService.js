@@ -103,7 +103,8 @@ class RevaluationService {
 
         const query = {
             user: userId,
-            date: { $gte: startDate, $lte: endDate }
+            date: { $gte: startDate, $lte: endDate },
+            status: 'validated'
         };
 
         if (currencies.length > 0) {
@@ -259,6 +260,7 @@ class RevaluationService {
                 const recentTx = await Transaction.find({
                     user: userId,
                     originalCurrency: account.currency,
+                    status: 'validated',
                     'forexMetadata.isHistoricallyAccurate': true
                 }).sort({ date: -1 }).limit(20);
 
